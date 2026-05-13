@@ -89,17 +89,20 @@ func TestShellGolden(t *testing.T) {
 	rightFill := color.NRGBA{R: 0x88, G: 0x55, B: 0x22, A: 0xff}
 	mainFill := color.NRGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff}
 
+	shmSidebarProps := sidebar.Props{
+		Items: []sidebar.Item{
+			{Icon: testIcon(), Label: "", OnClick: func() {}},
+			{Icon: testIcon(), Label: "", OnClick: func() {}},
+		},
+		Shaper: shaper,
+	}
+
 	shmProps := func() shell.Props {
-		items := []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func() {}},
-			{Icon: testIcon(), Label: "", OnClick: func() {}},
-		}
 		links := []navbar.Link{{Label: ""}, {Label: ""}}
 		return shell.Props{
-			Layout:  shell.SidebarHeaderMain,
-			Sidebar: sidebar.Props{Items: items, Shaper: shaper},
-			Navbar:  navbar.Props{Links: links, Shaper: shaper},
-			Main:    fillRect(mainFill),
+			Layout: shell.SidebarHeaderMain,
+			Navbar: navbar.Props{Links: links, Shaper: shaper},
+			Main:   fillRect(mainFill),
 		}
 	}
 
@@ -112,21 +115,26 @@ func TestShellGolden(t *testing.T) {
 	}
 
 	cases := []struct {
-		name   string
-		props  shell.Props
-		colors tokens.ColorTokens
-		bg     color.NRGBA
-		size   image.Point
-		ratio  float32
+		name       string
+		props      shell.Props
+		sidebarProps *sidebar.Props
+		colors     tokens.ColorTokens
+		bg         color.NRGBA
+		size       image.Point
+		ratio      float32
 	}{
-		{"light-sidebar-header-main", shmProps(), tokens.DefaultLight, lightBG, shmSize, 0},
-		{"dark-sidebar-header-main", shmProps(), tokens.DefaultDark, darkBG, shmSize, 0},
-		{"light-split-pane-50-50", splitProps(), tokens.DefaultLight, lightBG, splitSize, 0.5},
-		{"light-split-pane-30-70", splitProps(), tokens.DefaultLight, lightBG, splitSize, 0.3},
+		{"light-sidebar-header-main", shmProps(), &shmSidebarProps, tokens.DefaultLight, lightBG, shmSize, 0},
+		{"dark-sidebar-header-main", shmProps(), &shmSidebarProps, tokens.DefaultDark, darkBG, shmSize, 0},
+		{"light-split-pane-50-50", splitProps(), nil, tokens.DefaultLight, lightBG, splitSize, 0.5},
+		{"light-split-pane-30-70", splitProps(), nil, tokens.DefaultLight, lightBG, splitSize, 0.3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := shell.Render(shaper, tc.props, tc.colors, tokens.Spacing, tokens.DefaultTypeScale, tc.ratio)
+			var sidebarW layout.Widget
+			if tc.sidebarProps != nil {
+				sidebarW = sidebar.Render(shaper, *tc.sidebarProps, false, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			}
+			w := shell.Render(shaper, tc.props, sidebarW, tc.colors, tokens.Spacing, tokens.DefaultTypeScale, tc.ratio)
 			renderGolden(t, tc.name, tc.size, scene(w, tc.bg))
 		})
 	}
@@ -242,13 +250,13 @@ func TestShellSidebarHeaderMainTabTraversal(t *testing.T) {
 
 	props := shell.Props{
 		Layout: shell.SidebarHeaderMain,
-		Sidebar: sidebar.Props{
+		Sidebar: sidebar.Sidebar(rx.Of(theme.Default()), sidebar.Props{
 			Items: []sidebar.Item{
 				{Icon: testIcon(), Label: "", OnClick: func() {}},
 			},
 			Collapsed: rx.Of(false),
 			Shaper:    shaper,
-		},
+		}),
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
@@ -353,6 +361,137 @@ func TestShellSidebarHeaderMainTabTraversal(t *testing.T) {
 	r.MoveFocus(key.FocusForward)
 	driveFrame(composed, ops, r, tabSize)
 	check("Tab #4 (→ main)", false, false, true)
+}
+
+// TestShellCustomSidebarWidget confirms that a caller-supplied
+// rx.Observable[layout.Widget] (not sidebar.Sidebar) works as the Sidebar
+// slot and that the op-stream order is sidebar → navbar → main, preserving
+// Tab focus traversal. Structure mirrors TestShellSidebarHeaderMainTabTraversal;
+// the only delta is Props.Sidebar being a plain rx.Of widget instead of
+// sidebar.Sidebar.
+func TestShellCustomSidebarWidget(t *testing.T) {
+	shaper := defaultShaper(t)
+	var mainClick widget.Clickable
+	var brandClick widget.Clickable
+	var seedClick widget.Clickable
+	var customSBClick widget.Clickable
+
+	customSBWidget := func(gtx layout.Context) layout.Dimensions {
+		return customSBClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			size := image.Pt(40, 256)
+			paint.FillShape(gtx.Ops, color.NRGBA{R: 60, G: 60, B: 60, A: 255}, clip.Rect{Max: size}.Op())
+			return layout.Dimensions{Size: size}
+		})
+	}
+
+	mainWidget := func(gtx layout.Context) layout.Dimensions {
+		return mainClick.Layout(gtx, fillRect(color.NRGBA{R: 0, G: 200, B: 0, A: 255}))
+	}
+	brandWidget := func(gtx layout.Context) layout.Dimensions {
+		return brandClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			size := image.Pt(40, 20)
+			paint.FillShape(gtx.Ops, color.NRGBA{R: 80, G: 80, B: 200, A: 255}, clip.Rect{Max: size}.Op())
+			return layout.Dimensions{Size: size}
+		})
+	}
+
+	props := shell.Props{
+		Layout:  shell.SidebarHeaderMain,
+		Sidebar: rx.Of[layout.Widget](customSBWidget),
+		Navbar: navbar.Props{
+			Brand: brandWidget,
+			Links: []navbar.Link{
+				{Label: "", OnClick: func() {}},
+			},
+			Shaper: shaper,
+		},
+		Main: mainWidget,
+	}
+	body := shell.Shell(rx.Of(theme.Default()), props)
+	bodyW := liveWidget(t, body)
+
+	composed := func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return seedClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: image.Pt(1, 1)}
+				})
+			}),
+			layout.Flexed(1, bodyW),
+		)
+	}
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+
+	driveFrame(composed, ops, r, tabSize)
+	driveFrame(composed, ops, r, tabSize)
+
+	drainFocus := func() {
+		gtx := layout.Context{
+			Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+			Constraints: layout.Exact(tabSize),
+			Ops:         ops,
+			Source:      r.Source(),
+		}
+		for _, tag := range []any{&seedClick, &customSBClick, &brandClick, &mainClick} {
+			for {
+				if _, ok := gtx.Event(key.FocusFilter{Target: tag}); !ok {
+					break
+				}
+			}
+		}
+	}
+	drainFocus()
+
+	gtx := layout.Context{
+		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+		Constraints: layout.Exact(tabSize),
+		Ops:         ops,
+		Source:      r.Source(),
+	}
+	gtx.Execute(key.FocusCmd{Tag: &seedClick})
+	driveFrame(composed, ops, r, tabSize)
+
+	check := func(stage string, wantSeed, wantCustomSB, wantBrand, wantMain bool) {
+		t.Helper()
+		gtx := layout.Context{
+			Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+			Constraints: layout.Exact(tabSize),
+			Ops:         ops,
+			Source:      r.Source(),
+		}
+		gotSeed := gtx.Focused(&seedClick)
+		gotCustomSB := gtx.Focused(&customSBClick)
+		gotBrand := gtx.Focused(&brandClick)
+		gotMain := gtx.Focused(&mainClick)
+		if gotSeed != wantSeed || gotCustomSB != wantCustomSB || gotBrand != wantBrand || gotMain != wantMain {
+			t.Errorf("%s: seed=%v customSB=%v brand=%v main=%v; want seed=%v customSB=%v brand=%v main=%v",
+				stage, gotSeed, gotCustomSB, gotBrand, gotMain, wantSeed, wantCustomSB, wantBrand, wantMain)
+		}
+	}
+
+	check("after Focus(seed)", true, false, false, false)
+
+	// Tab #1 → custom sidebar widget (rendered first in Flex op-stream).
+	r.MoveFocus(key.FocusForward)
+	driveFrame(composed, ops, r, tabSize)
+	check("Tab #1 (→ custom sidebar)", false, true, false, false)
+
+	// Tab #2 → navbar brand.
+	r.MoveFocus(key.FocusForward)
+	driveFrame(composed, ops, r, tabSize)
+	check("Tab #2 (→ navbar brand)", false, false, true, false)
+
+	// Tab #3 → navbar link.
+	r.MoveFocus(key.FocusForward)
+	driveFrame(composed, ops, r, tabSize)
+	check("Tab #3 (→ navbar link)", false, false, false, false)
+
+	// Tab #4 → main.
+	r.MoveFocus(key.FocusForward)
+	driveFrame(composed, ops, r, tabSize)
+	check("Tab #4 (→ main)", false, false, false, true)
 }
 
 // ---- golden harness (inlined; prism/internal/golden is not importable

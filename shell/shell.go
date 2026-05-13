@@ -8,6 +8,12 @@
 // Go function consuming a Prism theme observable, returning a stream
 // of layout.Widget. Source is intentionally short — copy it into
 // your own app and modify as needed.
+//
+// The Sidebar slot accepts any rx.Observable[layout.Widget], so callers
+// can supply a cadence/sidebar instance, a cadence/accordion-based
+// column, or any other pre-built widget stream. The static Render path
+// accepts a pre-built layout.Widget for the sidebar slot; Props.Sidebar
+// is not consulted by Render.
 package shell
 
 import (
@@ -25,7 +31,6 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/navbar"
-	"github.com/vibrantgio/cadence/sidebar"
 	"github.com/vibrantgio/prism/theme"
 	"github.com/vibrantgio/prism/tokens"
 )
@@ -50,7 +55,12 @@ type Props struct {
 	Layout Layout
 
 	// SidebarHeaderMain slots.
-	Sidebar sidebar.Props
+	//
+	// Sidebar is the pre-built sidebar widget stream. Any
+	// rx.Observable[layout.Widget] is accepted — pass sidebar.Sidebar(th,
+	// sidebarProps) for the default cadence/sidebar, or any other widget
+	// stream. A nil Sidebar renders an empty leading column.
+	Sidebar rx.Observable[layout.Widget]
 	Navbar  navbar.Props
 	Main    layout.Widget
 
@@ -93,11 +103,13 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 // Render produces a layout.Widget for a shell with pre-resolved tokens
 // and no event processing. Intended for golden-image testing and
 // static demonstrations; production code should use Shell. splitRatio
-// is honoured by SplitPane; SidebarHeaderMain renders the sidebar in
-// its expanded state.
+// is honoured by SplitPane; SidebarHeaderMain uses the supplied sidebarW
+// directly (Props.Sidebar is not consulted). Pass nil sidebarW to render
+// an empty sidebar column.
 func Render(
 	shaper *text.Shaper,
 	props Props,
+	sidebarW layout.Widget,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
@@ -107,14 +119,17 @@ func Render(
 	case SplitPane:
 		return staticSplitPane(props.Left, props.Right, splitRatio, colors)
 	default:
-		return staticSidebarHeaderMain(shaper, props, colors, sp, ts)
+		return staticSidebarHeaderMain(sidebarW, shaper, props, colors, sp, ts)
 	}
 }
 
 // ---- SidebarHeaderMain ---------------------------------------------------
 
 func sidebarHeaderMainObservable(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
-	sb := sidebar.Sidebar(th, props.Sidebar)
+	sb := props.Sidebar
+	if sb == nil {
+		sb = rx.Of[layout.Widget](emptyWidget)
+	}
 	nb := navbar.Navbar(th, props.Navbar)
 	combined := rx.CombineLatest2(sb, nb)
 	return rx.Map(combined, func(next rx.Tuple2[layout.Widget, layout.Widget]) layout.Widget {
@@ -125,15 +140,18 @@ func sidebarHeaderMainObservable(th rx.Observable[theme.Theme], props Props) rx.
 }
 
 func staticSidebarHeaderMain(
+	sidebarW layout.Widget,
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	sbW := sidebar.Render(shaper, props.Sidebar, false, colors, sp, ts)
+	if sidebarW == nil {
+		sidebarW = emptyWidget
+	}
 	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
-	return composeSidebarHeaderMain(sbW, nbW, props.Main)
+	return composeSidebarHeaderMain(sidebarW, nbW, props.Main)
 }
 
 // composeSidebarHeaderMain stacks the three slots so that Tab focus
