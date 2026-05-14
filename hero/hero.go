@@ -226,6 +226,12 @@ func eyebrowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout
 		if minH := 2 * padV; h < minH {
 			h = minH
 		}
+		// clip.RRect does not clamp corner radii to fit the rect, so the pill
+		// "Full" radius (9999 dp sentinel) must be capped at half the smaller
+		// side or the corner geometry sprays across the canvas.
+		if maxRad := min(w, h) / 2; rad > maxRad {
+			rad = maxRad
+		}
 		bg := tintColor(tok.color.Primary, tok.color.Surface)
 		rrect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(w, h)}, SE: rad, SW: rad, NE: rad, NW: rad}
 		paint.FillShape(gtx.Ops, bg, rrect.Op(gtx.Ops))
