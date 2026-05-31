@@ -39,7 +39,7 @@ import (
 type Item struct {
 	Icon    layout.Widget
 	Label   string
-	OnClick func()
+	OnClick func(gtx layout.Context)
 	Active  bool
 }
 
@@ -53,7 +53,7 @@ type Props struct {
 
 	// OnToggleCollapse is invoked when the toggle affordance is clicked.
 	// May be nil.
-	OnToggleCollapse func()
+	OnToggleCollapse func(gtx layout.Context)
 
 	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
 	// default shaper is created once per subscription inside the
@@ -139,7 +139,7 @@ type toggleTag struct{ _ byte }
 func processInput(gtx layout.Context, props Props, clicks []widget.Clickable, tt *toggleTag) {
 	for i := range props.Items {
 		if props.Items[i].OnClick != nil && clicks[i].Clicked(gtx) {
-			props.Items[i].OnClick()
+			props.Items[i].OnClick(gtx)
 			// Pull focus to the clicked item so subsequent Arrow-Up/Down
 			// traversal is anchored to it. widget.Clickable does not move
 			// focus on pointer click by itself.
@@ -177,7 +177,7 @@ func processInput(gtx layout.Context, props Props, clicks []widget.Clickable, tt
 		}
 		if pe, ok := e.(pointer.Event); ok && pe.Kind == pointer.Press {
 			if props.OnToggleCollapse != nil {
-				props.OnToggleCollapse()
+				props.OnToggleCollapse(gtx)
 			}
 		}
 	}

@@ -63,7 +63,7 @@ type Props struct {
 	// click, Enter, or Space. May be nil. In SingleOpen mode, opening a
 	// closed Section first invokes OnToggle for every currently-open
 	// peer Section before invoking OnToggle for the activated index.
-	OnToggle func(idx int)
+	OnToggle func(gtx layout.Context, idx int)
 
 	// SingleOpen enforces the single-open invariant on activation: when
 	// true, opening a closed Section first closes every other open peer
@@ -160,12 +160,12 @@ func processInput(gtx layout.Context, props Props, clicks []widget.Clickable, op
 		if props.SingleOpen && !openMap[i] && props.OnToggle != nil {
 			for j := range props.Sections {
 				if j != i && openMap[j] {
-					props.OnToggle(j)
+					props.OnToggle(gtx, j)
 				}
 			}
 		}
 		if props.OnToggle != nil {
-			props.OnToggle(i)
+			props.OnToggle(gtx, i)
 		}
 	}
 	for i := range props.Sections {

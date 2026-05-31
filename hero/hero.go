@@ -57,7 +57,7 @@ const ctaIntrinsicWidth = unit.Dp(120)
 // also seeds the accessibility name; OnClick fires on activation.
 type CTA struct {
 	Label   string
-	OnClick func()
+	OnClick func(gtx layout.Context)
 }
 
 // Props configures a Hero. Any field may be its zero value; the layout
@@ -117,10 +117,10 @@ func Hero(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
 			return func(gtx layout.Context) layout.Dimensions {
 				if props.PrimaryCTA != nil && props.PrimaryCTA.OnClick != nil && primaryClick.Clicked(gtx) {
-					props.PrimaryCTA.OnClick()
+					props.PrimaryCTA.OnClick(gtx)
 				}
 				if props.SecondaryCTA != nil && props.SecondaryCTA.OnClick != nil && secondaryClick.Clicked(gtx) {
-					props.SecondaryCTA.OnClick()
+					props.SecondaryCTA.OnClick(gtx)
 				}
 				return drawHero(gtx, shaper, props, tok, &primaryClick, &secondaryClick)
 			}

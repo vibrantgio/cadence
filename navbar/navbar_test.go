@@ -167,8 +167,8 @@ func TestNavbarTabTraversal(t *testing.T) {
 	props := navbar.Props{
 		Brand: brand,
 		Links: []navbar.Link{
-			{Label: "", OnClick: func() {}},
-			{Label: "", OnClick: func() {}},
+			{Label: "", OnClick: func(_ layout.Context) {}},
+			{Label: "", OnClick: func(_ layout.Context) {}},
 		},
 		Actions: []layout.Widget{action},
 		Shaper:  defaultShaper(t),
@@ -269,8 +269,8 @@ func TestNavbarLinkClickFiresOnClick(t *testing.T) {
 	var fired0, fired1 int
 	props := navbar.Props{
 		Links: []navbar.Link{
-			{Label: "", OnClick: func() { fired0++ }},
-			{Label: "", OnClick: func() { fired1++ }},
+			{Label: "", OnClick: func(_ layout.Context) { fired0++ }},
+			{Label: "", OnClick: func(_ layout.Context) { fired1++ }},
 		},
 		Shaper: defaultShaper(t),
 	}

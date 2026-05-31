@@ -81,7 +81,7 @@ type Props[T any] struct {
 	// OnSort is invoked when the user clicks a Sortable header. May be
 	// nil. The consumer typically cycles None → Asc → Desc → None for
 	// the clicked column and re-emits Sort and a re-sorted Items slice.
-	OnSort func(col int)
+	OnSort func(gtx layout.Context, col int)
 
 	// Shaper, if nil, defaults to a shaper backed by Go fonts. Created
 	// once per subscription inside the rx.Defer scope so it survives
@@ -172,14 +172,14 @@ func processHeaderClicks[T any](
 	gtx layout.Context,
 	columns []Column[T],
 	clicks []widget.Clickable,
-	onSort func(col int),
+	onSort func(gtx layout.Context, col int),
 ) {
 	for i := range columns {
 		if !columns[i].Sortable {
 			continue
 		}
 		if clicks[i].Clicked(gtx) && onSort != nil {
-			onSort(i)
+			onSort(gtx, i)
 		}
 	}
 }

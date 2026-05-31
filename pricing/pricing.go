@@ -50,7 +50,7 @@ import (
 // label and seeds the accessibility name; OnClick fires on activation.
 type CTA struct {
 	Label   string
-	OnClick func()
+	OnClick func(gtx layout.Context)
 }
 
 // Tier describes a single pricing card.
@@ -121,7 +121,7 @@ func Pricing(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 				for i := range props.Tiers {
 					tier := &props.Tiers[i]
 					if tier.CTA != nil && tier.CTA.OnClick != nil && clicks[i].Clicked(gtx) {
-						tier.CTA.OnClick()
+						tier.CTA.OnClick(gtx)
 					}
 				}
 				return drawPricing(gtx, shaper, props, tok, clicks)

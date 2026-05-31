@@ -51,7 +51,7 @@ type Props struct {
 
 	Title   string
 	Body    layout.Widget
-	OnClose func()
+	OnClose func(gtx layout.Context)
 	Actions []layout.Widget
 
 	// Shaper, if nil, defaults to a shaper backed by Go fonts. The default
@@ -418,7 +418,7 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 			break
 		}
 		if pe, ok := e.(pointer.Event); ok && pe.Kind == pointer.Press {
-			fire(props.OnClose)
+			fire(gtx, props.OnClose)
 		}
 	}
 
@@ -431,7 +431,7 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 
 	// Close button click (mouse or Space/Enter when focused).
 	if st.closeClick.Clicked(gtx) {
-		fire(props.OnClose)
+		fire(gtx, props.OnClose)
 	}
 
 	// Escape → OnClose. Register the filter against every modal focus tag
@@ -443,7 +443,7 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 				break
 			}
 			if ke, ok := e.(key.Event); ok && ke.State == key.Press {
-				fire(props.OnClose)
+				fire(gtx, props.OnClose)
 			}
 		}
 	}
@@ -552,9 +552,9 @@ func emptyFlex() layout.Widget {
 
 // fire invokes cb when cb is non-nil. Centralised so OnClose is never
 // called against a nil pointer.
-func fire(cb func()) {
+func fire(gtx layout.Context, cb func(gtx layout.Context)) {
 	if cb != nil {
-		cb()
+		cb(gtx)
 	}
 }
 

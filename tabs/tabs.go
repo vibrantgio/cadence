@@ -54,7 +54,7 @@ type Props struct {
 
 	// OnSelect is invoked when the user changes the selection via click,
 	// Arrow-Left/Right (wrapping), Home, or End. May be nil.
-	OnSelect func(idx int)
+	OnSelect func(gtx layout.Context, idx int)
 
 	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
 	// default shaper is created once per subscription inside the
@@ -139,7 +139,7 @@ func processInput(gtx layout.Context, props Props, clicks []widget.Clickable) {
 		// negatives so wrapping at the ends needs no special case.
 		target = ((target % n) + n) % n
 		if props.OnSelect != nil {
-			props.OnSelect(target)
+			props.OnSelect(gtx, target)
 		}
 		gtx.Execute(key.FocusCmd{Tag: &clicks[target]})
 	}

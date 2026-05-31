@@ -176,7 +176,7 @@ func TestTabsArrowAndHomeEndWrapAndFocus(t *testing.T) {
 	props := tabs.Props{
 		Tabs:     threeTabs(),
 		Selected: rx.Of(0),
-		OnSelect: func(idx int) { calls = append(calls, idx) },
+		OnSelect: func(_ layout.Context, idx int) { calls = append(calls, idx) },
 		Shaper:   defaultShaper(t),
 	}
 	w := liveWidget(t, tabs.Tabs(rx.Of(theme.Default()), props))

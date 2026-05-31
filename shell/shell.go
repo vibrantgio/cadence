@@ -73,7 +73,7 @@ type Props struct {
 
 	// OnSplitChange is invoked when the user drags the divider. The
 	// value is the new ratio in [0, 1]. May be nil.
-	OnSplitChange func(ratio float32)
+	OnSplitChange func(gtx layout.Context, ratio float32)
 }
 
 // Layout-affecting constants. The navbar slot has a fixed height so
@@ -236,7 +236,7 @@ func staticSplitPane(left, right layout.Widget, ratio float32, colors tokens.Col
 	}
 }
 
-func processDrag(gtx layout.Context, ds *dragState, onChange func(float32)) {
+func processDrag(gtx layout.Context, ds *dragState, onChange func(gtx layout.Context, ratio float32)) {
 	totalW := float32(gtx.Constraints.Max.X)
 	if totalW <= 0 {
 		return
@@ -268,7 +268,7 @@ func processDrag(gtx layout.Context, ds *dragState, onChange func(float32)) {
 			if onChange != nil && (!ds.emitted || ds.lastEmit != r) {
 				ds.lastEmit = r
 				ds.emitted = true
-				onChange(r)
+				onChange(gtx, r)
 			}
 		case pointer.Release, pointer.Cancel:
 			ds.active = false

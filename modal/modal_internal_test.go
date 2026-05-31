@@ -30,7 +30,7 @@ func TestTabCyclesFocusAmongModalTags(t *testing.T) {
 	props := Props{
 		Body:    body,
 		Actions: []layout.Widget{action, action},
-		OnClose: func() {},
+		OnClose: func(_ layout.Context) {},
 	}
 	st := newState(len(props.Actions))
 	st.pushed = true

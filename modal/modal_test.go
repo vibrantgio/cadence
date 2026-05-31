@@ -188,7 +188,7 @@ func TestEscapeInvokesOnClose(t *testing.T) {
 	w := liveModal(t, modal.Props{
 		Open:    rx.Of(true),
 		Body:    fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40),
-		OnClose: func() { closed++ },
+		OnClose: func(_ layout.Context) { closed++ },
 	})
 
 	r := new(gioinput.Router)
@@ -215,7 +215,7 @@ func TestBackdropClickInvokesOnClose(t *testing.T) {
 	w := liveModal(t, modal.Props{
 		Open:    rx.Of(true),
 		Body:    fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40),
-		OnClose: func() { closed++ },
+		OnClose: func(_ layout.Context) { closed++ },
 	})
 
 	r := new(gioinput.Router)
@@ -265,7 +265,7 @@ func TestTabTrapsFocusWithinModal(t *testing.T) {
 		Open:    rx.Of(true),
 		Body:    body,
 		Actions: []layout.Widget{action1, action2},
-		OnClose: func() {},
+		OnClose: func(_ layout.Context) {},
 	})
 
 	// Compose the modal over a background that also registers a focusable
@@ -327,7 +327,7 @@ func TestShiftTabTrapsFocusWithinModal(t *testing.T) {
 		Open:    rx.Of(true),
 		Body:    body,
 		Actions: []layout.Widget{action1, action2},
-		OnClose: func() {},
+		OnClose: func(_ layout.Context) {},
 	})
 
 	composed := func(gtx layout.Context) layout.Dimensions {

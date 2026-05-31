@@ -91,8 +91,8 @@ func TestShellGolden(t *testing.T) {
 
 	shmSidebarProps := sidebar.Props{
 		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func() {}},
-			{Icon: testIcon(), Label: "", OnClick: func() {}},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
 		},
 		Shaper: shaper,
 	}
@@ -182,7 +182,7 @@ func TestShellSplitPaneDividerDrag(t *testing.T) {
 	props := shell.Props{
 		Layout:        shell.SplitPane,
 		SplitRatio:    rx.Of(float32(0.5)),
-		OnSplitChange: func(r float32) { got = append(got, r) },
+		OnSplitChange: func(_ layout.Context, r float32) { got = append(got, r) },
 	}
 	w := liveWidget(t, shell.Shell(rx.Of(theme.Default()), props))
 
@@ -252,7 +252,7 @@ func TestShellSidebarHeaderMainTabTraversal(t *testing.T) {
 		Layout: shell.SidebarHeaderMain,
 		Sidebar: sidebar.Sidebar(rx.Of(theme.Default()), sidebar.Props{
 			Items: []sidebar.Item{
-				{Icon: testIcon(), Label: "", OnClick: func() {}},
+				{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
 			},
 			Collapsed: rx.Of(false),
 			Shaper:    shaper,
@@ -260,7 +260,7 @@ func TestShellSidebarHeaderMainTabTraversal(t *testing.T) {
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
-				{Label: "", OnClick: func() {}},
+				{Label: "", OnClick: func(_ layout.Context) {}},
 			},
 			Shaper: shaper,
 		},
@@ -401,7 +401,7 @@ func TestShellCustomSidebarWidget(t *testing.T) {
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
-				{Label: "", OnClick: func() {}},
+				{Label: "", OnClick: func(_ layout.Context) {}},
 			},
 			Shaper: shaper,
 		},

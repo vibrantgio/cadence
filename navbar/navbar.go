@@ -36,7 +36,7 @@ import (
 // indicator and is independent of OnClick.
 type Link struct {
 	Label   string
-	OnClick func()
+	OnClick func(gtx layout.Context)
 	Active  bool
 }
 
@@ -78,7 +78,7 @@ func Navbar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wid
 			return func(gtx layout.Context) layout.Dimensions {
 				for i := range props.Links {
 					if props.Links[i].OnClick != nil && clicks[i].Clicked(gtx) {
-						props.Links[i].OnClick()
+						props.Links[i].OnClick(gtx)
 					}
 				}
 				return drawNavbar(gtx, shaper, props, clicks, tok.color, tok.spacing, tok.typ)

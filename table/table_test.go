@@ -127,7 +127,7 @@ func TestHeaderClickFiresOnSort(t *testing.T) {
 		Columns: cols,
 		Items:   rx.Of([]int{1, 2, 3}),
 		Shaper:  shaper,
-		OnSort:  func(col int) { calls = append(calls, col) },
+		OnSort:  func(_ layout.Context, col int) { calls = append(calls, col) },
 	}
 	w := liveWidget(t, table.Table(rx.Of(theme.Default()), props))
 

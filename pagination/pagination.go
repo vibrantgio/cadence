@@ -43,7 +43,7 @@ import (
 type Props struct {
 	Page      int
 	PageCount int
-	OnSelect  func(page int)
+	OnSelect  func(gtx layout.Context, page int)
 
 	// Shaper, if nil, defaults to a shaper backed by Go fonts. Created once
 	// per subscription inside the rx.Defer scope so it survives theme
@@ -82,14 +82,14 @@ func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 			return func(gtx layout.Context) layout.Dimensions {
 				if props.OnSelect != nil {
 					if props.Page > 1 && prevClick.Clicked(gtx) {
-						props.OnSelect(props.Page - 1)
+						props.OnSelect(gtx, props.Page-1)
 					}
 					if props.Page < props.PageCount && nextClick.Clicked(gtx) {
-						props.OnSelect(props.Page + 1)
+						props.OnSelect(gtx, props.Page+1)
 					}
 					for i := range pageClicks {
 						if pageClicks[i].Clicked(gtx) {
-							props.OnSelect(i + 1)
+							props.OnSelect(gtx, i+1)
 						}
 					}
 				}

@@ -170,7 +170,7 @@ func TestOutsideClickInvokesOnDismiss(t *testing.T) {
 		Anchor:    anchor,
 		Content:   content,
 		Placement: popover.Top,
-		OnDismiss: func() { dismissed++ },
+		OnDismiss: func(_ layout.Context) { dismissed++ },
 	})
 
 	r := new(gioinput.Router)
@@ -220,7 +220,7 @@ func TestArbitrationDismissesPriorPopover(t *testing.T) {
 		Anchor:    anchor,
 		Content:   content,
 		Placement: popover.Top,
-		OnDismiss: func() { aDismissed++ },
+		OnDismiss: func(_ layout.Context) { aDismissed++ },
 	})
 	// Subscribing B sets arbitration top to B; A's next frame should
 	// observe the change and fire OnDismiss.
@@ -229,7 +229,7 @@ func TestArbitrationDismissesPriorPopover(t *testing.T) {
 		Anchor:    anchor,
 		Content:   content,
 		Placement: popover.Bottom,
-		OnDismiss: func() {},
+		OnDismiss: func(_ layout.Context) {},
 	})
 
 	r := new(gioinput.Router)

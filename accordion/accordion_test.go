@@ -176,7 +176,7 @@ func TestAccordionArrowSpaceEnter(t *testing.T) {
 			{Title: ""},
 		},
 		Open:     rx.Of(map[int]bool{}),
-		OnToggle: func(idx int) { calls = append(calls, idx) },
+		OnToggle: func(_ layout.Context, idx int) { calls = append(calls, idx) },
 		Shaper:   defaultShaper(t),
 	}
 	w := liveWidget(t, accordion.Accordion(rx.Of(theme.Default()), props))
@@ -255,7 +255,7 @@ func TestAccordionSingleOpenCollapsesPrior(t *testing.T) {
 			{Title: "", Body: bodyRect(color.NRGBA{A: 0xff})},
 		},
 		Open:       rx.Of(map[int]bool{0: true}),
-		OnToggle:   func(idx int) { calls = append(calls, idx) },
+		OnToggle:   func(_ layout.Context, idx int) { calls = append(calls, idx) },
 		SingleOpen: true,
 		Shaper:     defaultShaper(t),
 	}

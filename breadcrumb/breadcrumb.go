@@ -39,7 +39,7 @@ import (
 // enforce this — interactivity follows the OnClick field per item.
 type Item struct {
 	Label   string
-	OnClick func()
+	OnClick func(gtx layout.Context)
 }
 
 // Props configures a Breadcrumb. Items must contain at least one entry;
@@ -78,7 +78,7 @@ func Breadcrumb(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 			return func(gtx layout.Context) layout.Dimensions {
 				for i := range props.Items {
 					if props.Items[i].OnClick != nil && clicks[i].Clicked(gtx) {
-						props.Items[i].OnClick()
+						props.Items[i].OnClick(gtx)
 					}
 				}
 				return drawBreadcrumb(gtx, shaper, props.Items, clicks, tok.color, tok.spacing, tok.typ)

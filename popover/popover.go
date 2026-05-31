@@ -56,7 +56,7 @@ type Props struct {
 	Anchor    layout.Widget
 	Content   layout.Widget
 	Placement Placement
-	OnDismiss func()
+	OnDismiss func(gtx layout.Context)
 }
 
 type resolvedTokens struct {
@@ -102,7 +102,7 @@ func Popover(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 				// Arbitration: another popover overtook us while we
 				// remained open; fire OnDismiss so the caller flips Open.
 				if openNow && !live {
-					fire(props.OnDismiss)
+					fire(gtx, props.OnDismiss)
 				}
 				return drawPopover(gtx, props, tok, st, openNow, live)
 			}
@@ -355,15 +355,15 @@ func processInput(gtx layout.Context, props Props, st *popoverState) {
 			break
 		}
 		if pe, ok := e.(pointer.Event); ok && pe.Kind == pointer.Press {
-			fire(props.OnDismiss)
+			fire(gtx, props.OnDismiss)
 		}
 	}
 }
 
 // fire invokes cb when cb is non-nil. Centralised so OnDismiss is never
 // called against a nil pointer.
-func fire(cb func()) {
+func fire(gtx layout.Context, cb func(gtx layout.Context)) {
 	if cb != nil {
-		cb()
+		cb(gtx)
 	}
 }

@@ -77,7 +77,7 @@ func TestSidebarGolden(t *testing.T) {
 	items := func(activeIdx int) []sidebar.Item {
 		out := make([]sidebar.Item, 3)
 		for i := range out {
-			out[i] = sidebar.Item{Icon: testIcon(), Label: "", OnClick: func() {}}
+			out[i] = sidebar.Item{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}}
 			if i == activeIdx {
 				out[i].Active = true
 			}
@@ -116,8 +116,8 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 
 	render := func(activeIdx int, colors tokens.ColorTokens) *image.RGBA {
 		items := []sidebar.Item{
-			{Icon: testIcon(), OnClick: func() {}},
-			{Icon: testIcon(), OnClick: func() {}},
+			{Icon: testIcon(), OnClick: func(_ layout.Context) {}},
+			{Icon: testIcon(), OnClick: func(_ layout.Context) {}},
 		}
 		if activeIdx >= 0 {
 			items[activeIdx].Active = true
@@ -195,9 +195,9 @@ func TestSidebarArrowTraversalAndEnter(t *testing.T) {
 	var fired [3]int
 	props := sidebar.Props{
 		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func() { fired[0]++ }},
-			{Icon: testIcon(), Label: "", OnClick: func() { fired[1]++ }},
-			{Icon: testIcon(), Label: "", OnClick: func() { fired[2]++ }},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) { fired[0]++ }},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) { fired[1]++ }},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) { fired[2]++ }},
 		},
 		Collapsed: rx.Of(false),
 		Shaper:    defaultShaper(t),
@@ -255,10 +255,10 @@ func TestSidebarToggleDispatchesOnToggleCollapse(t *testing.T) {
 	var toggleCount int
 	props := sidebar.Props{
 		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func() {}},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
 		},
 		Collapsed:        rx.Of(false),
-		OnToggleCollapse: func() { toggleCount++ },
+		OnToggleCollapse: func(_ layout.Context) { toggleCount++ },
 		Shaper:           defaultShaper(t),
 	}
 	w := liveWidget(t, sidebar.Sidebar(rx.Of(theme.Default()), props))
