@@ -207,6 +207,40 @@ func TestEscapeInvokesOnClose(t *testing.T) {
 	}
 }
 
+// TestCloseButtonActivatesOnClose verifies the close affordance — now a
+// prism/button keyed to &st.closeClick — invokes OnClose when activated by
+// keyboard while focused. The button drains its own Clicked() and routes
+// through Props.OnClick; the modal no longer checks Clicked itself, so this
+// is the only guard against the close button silently doing nothing.
+func TestCloseButtonActivatesOnClose(t *testing.T) {
+	var closed int
+	w := liveModal(t, modal.Props{
+		Open:    rx.Of(true),
+		Body:    fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40),
+		OnClose: func(_ layout.Context) { closed++ },
+	})
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+
+	// Frame 1 registers tags + requests initial focus; frame 2 applies it,
+	// leaving the close button focused (same setup as the Escape test).
+	driveFrame(w, ops, r, canvasSize)
+	driveFrame(w, ops, r, canvasSize)
+
+	// widget.Clickable registers a click on Return/Space release after a
+	// matching press while focused — queue both in one frame.
+	r.Queue(
+		key.Event{Name: key.NameReturn, State: key.Press},
+		key.Event{Name: key.NameReturn, State: key.Release},
+	)
+	driveFrame(w, ops, r, canvasSize)
+
+	if closed != 1 {
+		t.Errorf("OnClose call count after close-button activation = %d, want 1", closed)
+	}
+}
+
 // TestBackdropClickInvokesOnClose verifies Measurable (c) — pressing inside
 // the scrim region but outside the modal surface invokes OnClose. A press
 // inside the surface must NOT invoke OnClose.

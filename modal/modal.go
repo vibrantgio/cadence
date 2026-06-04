@@ -36,6 +36,7 @@ import (
 	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
+	"github.com/vibrantgio/prism/button"
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/prism/theme"
 	"github.com/vibrantgio/prism/tokens"
@@ -87,8 +88,6 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 		)
 	})
 
-	inputs := rx.CombineLatest2(resolved, open)
-
 	return rx.Defer(func() rx.Observable[layout.Widget] {
 		shaper := props.Shaper
 		if shaper == nil {
@@ -97,8 +96,24 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 
 		st := newState(len(props.Actions))
 
-		return rx.Map(inputs, func(next rx.Tuple2[resolvedTokens, bool]) layout.Widget {
-			tok, openNow := next.First, next.Second
+		// The close affordance is a prism/button icon-only variant. The modal
+		// owns its clickable (&st.closeClick) so the focus trap stays keyed to
+		// a single tag and no doubled focus ring is drawn; OnClose is routed
+		// through the button's OnClick. Build once here in the rx.Defer scope
+		// and fold the latest emitted widget into the input pipeline — never
+		// subscribe inside the per-frame widget closure.
+		closeBtn := button.Button(th, button.Props{
+			Icon:        crossIcon,
+			Description: "Close",
+			Clickable:   &st.closeClick,
+			OnClick:     props.OnClose,
+			Shaper:      shaper,
+		})
+
+		inputs := rx.CombineLatest3(resolved, open, closeBtn)
+
+		return rx.Map(inputs, func(next rx.Tuple3[resolvedTokens, bool, layout.Widget]) layout.Widget {
+			tok, openNow, closeW := next.First, next.Second, next.Third
 
 			// Transition tracking — push on open, pop on close.
 			if openNow && !st.pushed {
@@ -116,7 +131,7 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 					return layout.Dimensions{Size: gtx.Constraints.Max}
 				}
 				live := isTop(st.id)
-				return drawModal(gtx, shaper, props, tok, st, live)
+				return drawModal(gtx, shaper, props, tok, st, live, closeW)
 			}
 		})
 	})
@@ -139,11 +154,16 @@ func Render(
 ) layout.Widget {
 	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
 	st := newState(len(props.Actions))
+	// Static, inert close affordance: the same icon painter the live path
+	// uses, rendered through button.RenderIcon so goldens stay text-free and
+	// deterministic. Radius is threaded straight through (callers pass a sharp
+	// radius for golden determinism).
+	closeW := button.RenderIcon(crossIcon, colors, sp, rad, ts, button.RenderState{})
 	return func(gtx layout.Context) layout.Dimensions {
 		if !open {
 			return layout.Dimensions{Size: gtx.Constraints.Max}
 		}
-		return drawModal(gtx, shaper, props, tok, st, false)
+		return drawModal(gtx, shaper, props, tok, st, false, closeW)
 	}
 }
 
@@ -155,12 +175,12 @@ type modalState struct {
 	pushed           bool
 	wantInitialFocus bool
 
-	// Stable tags so the router can route events across frames.
-	scrimTag    int
-	surfaceTag  int
-	closeTag    int
-	closeClick  widget.Clickable
-	actionTags  []int
+	// Stable tags so the router can route events across frames. The close
+	// button's clickable doubles as its focus tag (driven by prism/button).
+	scrimTag   int
+	surfaceTag int
+	closeClick widget.Clickable
+	actionTags []int
 
 	focused int // index into focus tag list; -1 if none
 }
@@ -194,6 +214,7 @@ func drawModal(
 	tok resolvedTokens,
 	st *modalState,
 	live bool,
+	closeWidget layout.Widget,
 ) layout.Dimensions {
 	canvas := gtx.Constraints.Max
 	r := gtx.Dp(unit.Dp(tok.radius.Lg))
@@ -244,7 +265,7 @@ func drawModal(
 	contentGtx.Constraints = layout.Exact(image.Pt(surfW, surfH))
 	contentGtx.Constraints.Min = image.Point{}
 	layout.UniformInset(unit.Dp(tok.spacing.S5)).Layout(contentGtx, func(gtx layout.Context) layout.Dimensions {
-		return drawSurfaceContents(gtx, shaper, props, tok, st, live, gap)
+		return drawSurfaceContents(gtx, shaper, props, tok, st, live, gap, closeWidget)
 	})
 	off.Pop()
 
@@ -265,8 +286,9 @@ func drawSurfaceContents(
 	st *modalState,
 	live bool,
 	gap int,
+	closeWidget layout.Widget,
 ) layout.Dimensions {
-	header := headerWidget(shaper, props, tok, st, live)
+	header := headerWidget(shaper, props, tok, closeWidget)
 	footer := footerWidget(props, tok, st, live)
 
 	children := []layout.FlexChild{
@@ -285,14 +307,17 @@ func drawSurfaceContents(
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-// headerWidget renders the title (drawn only when non-empty) and the
-// close affordance on the right.
-func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, st *modalState, live bool) layout.Widget {
+// headerWidget renders the title (drawn only when non-empty) on the left and
+// the close affordance — a prism/button icon variant, built upstream and
+// threaded in as closeWidget — on the right. The button owns its own focus
+// ring and click handling; the header only positions it.
+func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, closeWidget layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		closeSize := gtx.Dp(unit.Dp(24))
 		titleFlex := layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			if props.Title == "" {
-				return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, closeSize)}
+				// Empty title contributes no height; the Rigid close button
+				// drives the header row height via Middle alignment.
+				return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 			}
 			mColor := op.Record(gtx.Ops)
 			paint.ColorOp{Color: tok.color.OnSurface}.Add(gtx.Ops)
@@ -300,36 +325,8 @@ func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, st *moda
 			wl := widget.Label{MaxLines: 1}
 			return wl.Layout(gtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(tok.typ.TitleMedium), props.Title, material)
 		})
-		closeFlex := layout.Rigid(closeButtonWidget(closeSize, tok, st, live))
+		closeFlex := layout.Rigid(closeWidget)
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, titleFlex, closeFlex)
-	}
-}
-
-// closeButtonWidget draws an "×" glyph in a square hit target and routes
-// click/Enter/Space through st.closeClick. Focus participation is opt-in:
-// only when live is true does the modal register the focus tag.
-func closeButtonWidget(sizePx int, tok resolvedTokens, st *modalState, live bool) layout.Widget {
-	return func(gtx layout.Context) layout.Dimensions {
-		sz := image.Pt(sizePx, sizePx)
-		gtx.Constraints = layout.Exact(sz)
-
-		return st.closeClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			rect := image.Rectangle{Max: sz}
-			defer clip.Rect(rect).Push(gtx.Ops).Pop()
-
-			if live {
-				event.Op(gtx.Ops, &st.closeTag)
-				if gtx.Focused(&st.closeTag) {
-					paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{
-						Path:  clip.Rect(rect).Path(),
-						Width: float32(gtx.Dp(unit.Dp(2))),
-					}.Op())
-				}
-			}
-
-			drawCross(gtx, sz, tok.color.OnSurfaceVariant)
-			return layout.Dimensions{Size: sz}
-		})
 	}
 }
 
@@ -429,10 +426,10 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 		}
 	}
 
-	// Close button click (mouse or Space/Enter when focused).
-	if st.closeClick.Clicked(gtx) {
-		fire(gtx, props.OnClose)
-	}
+	// The close button is a prism/button instance: it drains its own
+	// Clicked() and invokes props.OnClose via Props.OnClick. The modal must
+	// NOT also check st.closeClick.Clicked here — the button has already
+	// consumed the event, so this check would always be false.
 
 	// Escape → OnClose. Register the filter against every modal focus tag
 	// so the event fires whenever any modal element has focus.
@@ -483,7 +480,7 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 // modal: the close button first, then one per non-nil action.
 func focusTags(props Props, st *modalState) []event.Tag {
 	tags := make([]event.Tag, 0, focusCount(props))
-	tags = append(tags, &st.closeTag)
+	tags = append(tags, &st.closeClick)
 	for i, a := range props.Actions {
 		if a == nil {
 			continue
@@ -504,11 +501,14 @@ func currentFocusIdx(gtx layout.Context, tags []event.Tag) int {
 	return -1
 }
 
-// drawCross paints an "×" shape — two diagonal strokes — centered inside
-// the size-sz square, in the given colour. Used as the close affordance.
-func drawCross(gtx layout.Context, sz image.Point, col color.NRGBA) {
-	w := float32(sz.X)
-	h := float32(sz.Y)
+// crossIcon paints an "×" shape — two diagonal strokes — into a
+// sizePx×sizePx box at the current origin in colour col. It is the modal
+// close button's glyph, satisfying the button.Props.Icon painter contract
+// (clip.Path / clip.Stroke only — no font or SVG rasterisation) so goldens
+// stay deterministic across GPU contexts.
+func crossIcon(gtx layout.Context, sizePx int, col color.NRGBA) {
+	w := float32(sizePx)
+	h := float32(sizePx)
 	pad := float32(gtx.Dp(unit.Dp(6)))
 	stroke := float32(gtx.Dp(unit.Dp(2)))
 	if stroke < 1 {

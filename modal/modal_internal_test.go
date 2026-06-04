@@ -12,6 +12,9 @@ import (
 	"gioui.org/text"
 	"gioui.org/unit"
 
+	"github.com/reactivego/rx"
+	"github.com/vibrantgio/prism/button"
+	"github.com/vibrantgio/prism/theme"
 	"github.com/vibrantgio/prism/tokens"
 )
 
@@ -45,8 +48,11 @@ func TestTabCyclesFocusAmongModalTags(t *testing.T) {
 		typ:     tokens.DefaultTypeScale,
 	}
 
+	// Build the live close button so &st.closeClick is registered as a focus
+	// target (the focus trap is keyed to it), mirroring the production path.
+	closeW := liveCloseWidget(t, st, shaper)
 	w := func(gtx layout.Context) layout.Dimensions {
-		return drawModal(gtx, shaper, props, tok, st, true)
+		return drawModal(gtx, shaper, props, tok, st, true, closeW)
 	}
 
 	r := new(gioinput.Router)
@@ -101,4 +107,28 @@ func TestTabCyclesFocusAmongModalTags(t *testing.T) {
 	if len(visited) < 2 {
 		t.Errorf("Tab did not cycle focus among modal tags: visited %v (n=%d), want ≥ 2 distinct tags", visited, len(visited))
 	}
+}
+
+// liveCloseWidget subscribes to a button.Button keyed to &st.closeClick and
+// returns its latest emitted widget, so a direct drawModal call gets the same
+// interactive close affordance the production Modal pipeline threads in.
+func liveCloseWidget(t *testing.T, st *modalState, shaper *text.Shaper) layout.Widget {
+	t.Helper()
+	obs := button.Button(rx.Of(theme.Default()), button.Props{
+		Icon:      crossIcon,
+		Clickable: &st.closeClick,
+		Shaper:    shaper,
+	})
+	var w layout.Widget
+	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+		if !done && next != nil {
+			w = next
+		}
+	}, rx.NewScheduler()).Wait(); err != nil {
+		t.Fatalf("close button subscribe: %v", err)
+	}
+	if w == nil {
+		t.Fatal("close button did not emit a widget")
+	}
+	return w
 }
