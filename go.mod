@@ -5,12 +5,7 @@ go 1.25.1
 require (
 	gioui.org v0.9.0
 	github.com/reactivego/rx v0.2.2
-	github.com/vibrantgio/prism/button v0.0.0
-	github.com/vibrantgio/prism/coordination v0.0.0
-	github.com/vibrantgio/prism/layout v0.0.0
-	github.com/vibrantgio/prism/list v0.0.0
-	github.com/vibrantgio/prism/theme v0.0.0
-	github.com/vibrantgio/prism/tokens v0.0.0
+	github.com/vibrantgio/prism v0.0.0
 	github.com/vibrantgio/pulse v0.0.0
 )
 
@@ -27,17 +22,6 @@ require (
 
 replace (
 	github.com/vibrantgio/mvu => ../mvu
-	// bench + internal/golden are prism/button's test-only deps. cadence never
-	// imports them as packages, but they enter the pruned module graph via
-	// button, so 'go mod tidy' must be able to read their go.mods — keep these
-	// replaces (they are intentionally not in require).
-	github.com/vibrantgio/prism/bench => ../prism/bench
-	github.com/vibrantgio/prism/button => ../prism/button
-	github.com/vibrantgio/prism/coordination => ../prism/coordination
-	github.com/vibrantgio/prism/internal/golden => ../prism/internal/golden
-	github.com/vibrantgio/prism/layout => ../prism/layout
-	github.com/vibrantgio/prism/list => ../prism/list
-	github.com/vibrantgio/prism/theme => ../prism/theme
-	github.com/vibrantgio/prism/tokens => ../prism/tokens
+	github.com/vibrantgio/prism => ../prism
 	github.com/vibrantgio/pulse => ../pulse
 )
