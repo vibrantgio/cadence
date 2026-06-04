@@ -13,6 +13,13 @@
 // coordination stack receives input; modals underneath remain painted but
 // inert.
 //
+// Focus ownership: the close affordance and each footer action own their own
+// focus tag and focus ring (the close button is a prism/button; actions
+// likewise register their own tags, e.g. a prism/button's caller-owned
+// *widget.Clickable). The modal does not wrap an action or draw a ring around
+// it — it only adds the caller-declared Props.ActionFocusTags to its Tab cycle
+// (route (a)), so a focused action shows exactly one ring: its own.
+//
 // Open/close is instantaneous in this package; entrance/exit transitions
 // are deferred to a later Pulse-integration goal.
 package modal
@@ -55,6 +62,19 @@ type Props struct {
 	OnClose func(gtx layout.Context)
 	Actions []layout.Widget
 
+	// ActionFocusTags lists the focus tags of the focusable Actions, in the
+	// order they should join the modal's Tab cycle (after the close button).
+	//
+	// Footer actions own their own focus tags and focus ring — the modal does
+	// not wrap an action or draw a ring around it. A prism/button action, for
+	// example, is built with a caller-owned *widget.Clickable; passing that
+	// &clickable here adds it to the Tab cycle (and the Escape trap) with no
+	// doubled outer ring. A non-focusable action (plain widget) simply omits
+	// its tag. nil entries are skipped. See ActionFocusTags vs Actions: the
+	// two slices are independent — list a tag here only for actions that
+	// participate in keyboard focus.
+	ActionFocusTags []event.Tag
+
 	// Shaper, if nil, defaults to a shaper backed by Go fonts. The default
 	// shaper is created once per subscription inside the rx.Defer scope, so
 	// it is not re-allocated on every theme change.
@@ -94,7 +114,7 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
 		}
 
-		st := newState(len(props.Actions))
+		st := newState()
 
 		// The close affordance is a prism/button icon-only variant. The modal
 		// owns its clickable (&st.closeClick) so the focus trap stays keyed to
@@ -153,7 +173,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
-	st := newState(len(props.Actions))
+	st := newState()
 	// Static, inert close affordance: the same icon painter the live path
 	// uses, rendered through button.RenderIcon so goldens stay text-free and
 	// deterministic. Radius is threaded straight through (callers pass a sharp
@@ -177,28 +197,23 @@ type modalState struct {
 
 	// Stable tags so the router can route events across frames. The close
 	// button's clickable doubles as its focus tag (driven by prism/button).
+	// Footer actions own their own focus tags (Props.ActionFocusTags); the
+	// modal holds none on their behalf.
 	scrimTag   int
 	surfaceTag int
 	closeClick widget.Clickable
-	actionTags []int
-
-	focused int // index into focus tag list; -1 if none
 }
 
-func newState(nActions int) *modalState {
-	return &modalState{
-		id:         allocStackID(),
-		actionTags: make([]int, nActions),
-		focused:    -1,
-	}
+func newState() *modalState {
+	return &modalState{id: allocStackID()}
 }
 
 // focusCount returns the number of focusable elements: 1 (close button)
-// plus one per non-nil action.
+// plus one per non-nil caller-declared action focus tag.
 func focusCount(props Props) int {
 	n := 1
-	for _, a := range props.Actions {
-		if a != nil {
+	for _, t := range props.ActionFocusTags {
+		if t != nil {
 			n++
 		}
 	}
@@ -265,7 +280,7 @@ func drawModal(
 	contentGtx.Constraints = layout.Exact(image.Pt(surfW, surfH))
 	contentGtx.Constraints.Min = image.Point{}
 	layout.UniformInset(unit.Dp(tok.spacing.S5)).Layout(contentGtx, func(gtx layout.Context) layout.Dimensions {
-		return drawSurfaceContents(gtx, shaper, props, tok, st, live, gap, closeWidget)
+		return drawSurfaceContents(gtx, shaper, props, tok, gap, closeWidget)
 	})
 	off.Pop()
 
@@ -283,13 +298,11 @@ func drawSurfaceContents(
 	shaper *text.Shaper,
 	props Props,
 	tok resolvedTokens,
-	st *modalState,
-	live bool,
 	gap int,
 	closeWidget layout.Widget,
 ) layout.Dimensions {
 	header := headerWidget(shaper, props, tok, closeWidget)
-	footer := footerWidget(props, tok, st, live)
+	footer := footerWidget(props, tok)
 
 	children := []layout.FlexChild{
 		layout.Rigid(header),
@@ -330,13 +343,11 @@ func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, closeWid
 	}
 }
 
-// footerWidget renders a right-aligned row of action widgets, each wrapped
-// in a clip area registered for focus participation when live. Returns nil
-// when there are no non-nil actions.
-func footerWidget(props Props, tok resolvedTokens, st *modalState, live bool) layout.Widget {
-	if len(props.Actions) == 0 {
-		return nil
-	}
+// footerWidget renders a right-aligned row of action widgets. Each action is
+// laid out bare: it owns its own focus tag and focus ring (the modal neither
+// wraps it nor decorates it), and joins the Tab cycle via Props.ActionFocusTags.
+// Returns nil when there are no non-nil actions.
+func footerWidget(props Props, tok resolvedTokens) layout.Widget {
 	any := false
 	for _, a := range props.Actions {
 		if a != nil {
@@ -351,35 +362,17 @@ func footerWidget(props Props, tok resolvedTokens, st *modalState, live bool) la
 
 	return func(gtx layout.Context) layout.Dimensions {
 		children := []layout.FlexChild{layout.Flexed(1, emptyFlex())}
-		ai := 0
 		first := true
-		for i, a := range props.Actions {
-			i, a := i, a
+		for _, a := range props.Actions {
+			a := a
 			if a == nil {
-				ai++
 				continue
 			}
 			if !first {
 				children = append(children, layout.Rigid(pllayout.HSpacer(gap)))
 			}
 			first = false
-			tagIdx := i
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				dims := a(gtx)
-				if live {
-					stk := clip.Rect{Max: dims.Size}.Push(gtx.Ops)
-					event.Op(gtx.Ops, &st.actionTags[tagIdx])
-					if gtx.Focused(&st.actionTags[tagIdx]) {
-						paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{
-							Path:  clip.Rect{Max: dims.Size}.Path(),
-							Width: float32(gtx.Dp(unit.Dp(2))),
-						}.Op())
-					}
-					stk.Pop()
-				}
-				return dims
-			}))
-			ai++
+			children = append(children, layout.Rigid(a))
 		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 	}
@@ -476,16 +469,17 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 	}
 }
 
-// focusTags returns the ordered slice of focus tags belonging to this
-// modal: the close button first, then one per non-nil action.
+// focusTags returns the ordered slice of focus tags belonging to this modal:
+// the close button first, then the caller-declared action focus tags. Action
+// tags are owned by the action widgets themselves (Props.ActionFocusTags); the
+// modal only sequences them for Tab cycling and the Escape trap.
 func focusTags(props Props, st *modalState) []event.Tag {
 	tags := make([]event.Tag, 0, focusCount(props))
 	tags = append(tags, &st.closeClick)
-	for i, a := range props.Actions {
-		if a == nil {
-			continue
+	for _, t := range props.ActionFocusTags {
+		if t != nil {
+			tags = append(tags, t)
 		}
-		tags = append(tags, &st.actionTags[i])
 	}
 	return tags
 }

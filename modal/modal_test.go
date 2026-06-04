@@ -23,9 +23,11 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
+	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/modal"
+	"github.com/vibrantgio/prism/button"
 	"github.com/vibrantgio/prism/theme"
 	"github.com/vibrantgio/prism/tokens"
 )
@@ -165,6 +167,31 @@ func liveModal(t *testing.T, props modal.Props) layout.Widget {
 	return w
 }
 
+// liveButtonAction subscribes to a labelled prism/button keyed to a caller-owned
+// clickable and returns its latest emitted widget. The caller passes &clk in
+// Props.ActionFocusTags so the button joins the modal's Tab cycle while owning
+// its own focus tag and ring.
+func liveButtonAction(t *testing.T, label string, clk *widget.Clickable) layout.Widget {
+	t.Helper()
+	obs := button.Button(rx.Of(theme.Default()), button.Props{
+		Label:     label,
+		Clickable: clk,
+		Shaper:    defaultShaper(t),
+	})
+	var w layout.Widget
+	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+		if !done && next != nil {
+			w = next
+		}
+	}, rx.NewScheduler()).Wait(); err != nil {
+		t.Fatalf("button action subscribe: %v", err)
+	}
+	if w == nil {
+		t.Fatal("button action did not emit a widget")
+	}
+	return w
+}
+
 // driveFrame lays out w against ops + router, returns the rendered dims.
 // ops is reset before layout; events queued on the router before the call
 // are delivered during w's layout pass and r.Frame.
@@ -287,19 +314,23 @@ func TestBackdropClickInvokesOnClose(t *testing.T) {
 // modal focus tags and does not advance focus to a background-registered
 // focusable, no matter how many times Tab is pressed.
 func TestTabTrapsFocusWithinModal(t *testing.T) {
-	// Two footer actions plus the implicit close button → three modal tags.
+	// Two prism/button footer actions plus the implicit close button → three
+	// modal tags. The actions own their clickables; those are the action focus
+	// tags (route (a)), so the modal cycles among all three without wrapping.
 	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
-	action1 := fixedRect(color.NRGBA{R: 80, G: 160, B: 220, A: 255}, 60, 28)
-	action2 := fixedRect(color.NRGBA{R: 220, G: 100, B: 100, A: 255}, 60, 28)
+	var clk1, clk2 widget.Clickable
+	action1 := liveButtonAction(t, "A", &clk1)
+	action2 := liveButtonAction(t, "B", &clk2)
 
 	// A background focusable that the test will assert focus never reaches.
 	backgroundTag := new(int)
 
 	mw := liveModal(t, modal.Props{
-		Open:    rx.Of(true),
-		Body:    body,
-		Actions: []layout.Widget{action1, action2},
-		OnClose: func(_ layout.Context) {},
+		Open:            rx.Of(true),
+		Body:            body,
+		Actions:         []layout.Widget{action1, action2},
+		ActionFocusTags: []event.Tag{&clk1, &clk2},
+		OnClose:         func(_ layout.Context) {},
 	})
 
 	// Compose the modal over a background that also registers a focusable
@@ -352,16 +383,18 @@ func TestTabTrapsFocusWithinModal(t *testing.T) {
 // side.
 func TestShiftTabTrapsFocusWithinModal(t *testing.T) {
 	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
-	action1 := fixedRect(color.NRGBA{R: 80, G: 160, B: 220, A: 255}, 60, 28)
-	action2 := fixedRect(color.NRGBA{R: 220, G: 100, B: 100, A: 255}, 60, 28)
+	var clk1, clk2 widget.Clickable
+	action1 := liveButtonAction(t, "A", &clk1)
+	action2 := liveButtonAction(t, "B", &clk2)
 
 	backgroundTag := new(int)
 
 	mw := liveModal(t, modal.Props{
-		Open:    rx.Of(true),
-		Body:    body,
-		Actions: []layout.Widget{action1, action2},
-		OnClose: func(_ layout.Context) {},
+		Open:            rx.Of(true),
+		Body:            body,
+		Actions:         []layout.Widget{action1, action2},
+		ActionFocusTags: []event.Tag{&clk1, &clk2},
+		OnClose:         func(_ layout.Context) {},
 	})
 
 	composed := func(gtx layout.Context) layout.Dimensions {
@@ -395,6 +428,135 @@ func TestShiftTabTrapsFocusWithinModal(t *testing.T) {
 	}
 	if gtx.Focused(backgroundTag) {
 		t.Fatal("Shift+Tab cycle escaped the modal: background tag has focus")
+	}
+}
+
+// ---- GX.5: footer actions own their own focus tags ----
+
+// TestActionOwnsFocusTag confirms route (a): a prism/button action joins the
+// Tab cycle via its own caller-owned clickable. After tabbing off the close
+// button, the action's &clickable — not a modal-interposed tag — holds focus,
+// which is what makes the button draw its own (single) focus ring.
+func TestActionOwnsFocusTag(t *testing.T) {
+	var clk widget.Clickable
+	action := liveButtonAction(t, "OK", &clk)
+	w := liveModal(t, modal.Props{
+		Open:            rx.Of(true),
+		Body:            fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40),
+		Actions:         []layout.Widget{action},
+		ActionFocusTags: []event.Tag{&clk},
+		OnClose:         func(_ layout.Context) {},
+	})
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+	driveFrame(w, ops, r, canvasSize) // register tags + request initial focus
+	driveFrame(w, ops, r, canvasSize) // initial focus → close button
+
+	r.Queue(key.Event{Name: key.NameTab, State: key.Press})
+	driveFrame(w, ops, r, canvasSize) // focus → action's own clickable
+
+	gtx := layout.Context{
+		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+		Constraints: layout.Exact(canvasSize),
+		Ops:         ops,
+		Source:      r.Source(),
+	}
+	if !gtx.Focused(&clk) {
+		t.Error("after Tab from the close button, the prism/button action's own clickable must hold focus (route (a)); the modal must not interpose its own action tag")
+	}
+}
+
+// TestActionFocusRingNotDoubled confirms the modal draws no focus ring around a
+// focused action — so a prism/button action shows only its own ring, never a
+// doubled outer one. Two blank actions reserve space and register a focus tag
+// but paint nothing. If the modal drew a ring around the focused action it would
+// land at the first action's x when that one is focused and at the second's x
+// otherwise, so the two captures would differ; drawing nothing leaves the
+// surface pixel-identical. Both captures keep the close button unfocused (focus
+// sits on an action in each), so its ring cannot confound the diff.
+func TestActionFocusRingNotDoubled(t *testing.T) {
+	tag0, tag1 := new(int), new(int)
+	blank := func(tag *int) layout.Widget {
+		return func(gtx layout.Context) layout.Dimensions {
+			sz := image.Pt(gtx.Dp(unit.Dp(64)), gtx.Dp(unit.Dp(32)))
+			defer clip.Rect{Max: sz}.Push(gtx.Ops).Pop()
+			event.Op(gtx.Ops, tag) // register as a focus/input target
+			return layout.Dimensions{Size: sz}
+		}
+	}
+	w := liveModal(t, modal.Props{
+		Open:            rx.Of(true),
+		Body:            fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40),
+		Actions:         []layout.Widget{blank(tag0), blank(tag1)},
+		ActionFocusTags: []event.Tag{tag0, tag1},
+		OnClose:         func(_ layout.Context) {},
+	})
+
+	win, err := headless.NewWindow(canvasW, canvasH)
+	if err != nil {
+		t.Skipf("headless rendering not supported: %v", err)
+		return
+	}
+	defer win.Release()
+	r := new(gioinput.Router)
+	var ops op.Ops
+	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+
+	render := func(gpu bool) {
+		ops.Reset()
+		gtx := layout.Context{
+			Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+			Constraints: layout.Exact(canvasSize),
+			Ops:         &ops,
+			Source:      r.Source(),
+		}
+		paint.FillShape(gtx.Ops, bg, clip.Rect{Max: gtx.Constraints.Max}.Op())
+		w(gtx)
+		if gpu {
+			if err := win.Frame(&ops); err != nil {
+				t.Fatalf("Frame: %v", err)
+			}
+		}
+		r.Frame(&ops)
+	}
+	shoot := func() *image.RGBA {
+		render(true)
+		img := image.NewRGBA(image.Rectangle{Max: canvasSize})
+		if err := win.Screenshot(img); err != nil {
+			t.Fatalf("Screenshot: %v", err)
+		}
+		return img
+	}
+	isFocused := func(tag event.Tag) bool {
+		gtx := layout.Context{
+			Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+			Constraints: layout.Exact(canvasSize),
+			Ops:         new(op.Ops),
+			Source:      r.Source(),
+		}
+		return gtx.Focused(tag)
+	}
+
+	render(false) // register tags + request initial focus
+	render(false) // initial focus → close button
+
+	r.Queue(key.Event{Name: key.NameTab, State: key.Press})
+	render(false)
+	if !isFocused(tag0) {
+		t.Fatal("first action tag not focused after one Tab")
+	}
+	imgA := shoot()
+
+	r.Queue(key.Event{Name: key.NameTab, State: key.Press})
+	render(false)
+	if !isFocused(tag1) {
+		t.Fatal("second action tag not focused after two Tabs")
+	}
+	imgB := shoot()
+
+	if n := pixelDiff(imgA, imgB); n != 0 {
+		t.Errorf("focusing different footer actions changed %d pixel(s); the modal must draw no focus ring around actions (doubled/outer-ring regression)", n)
 	}
 }
 

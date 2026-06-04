@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"gioui.org/font/gofont"
+	"gioui.org/io/event"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/text"
 	"gioui.org/unit"
+	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/button"
@@ -26,16 +28,22 @@ import (
 func TestTabCyclesFocusAmongModalTags(t *testing.T) {
 	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
 
-	stubSize := image.Pt(60, 28)
-	action := func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: stubSize} }
+	// Two prism/button actions, each keyed to its own caller-owned clickable.
+	// Those clickables are the action focus tags (route (a)); the modal owns
+	// none on their behalf, so they must register themselves — which the live
+	// button does — to be focusable.
+	var clkA, clkB widget.Clickable
+	actA := liveButton(t, shaper, "A", &clkA)
+	actB := liveButton(t, shaper, "B", &clkB)
 	body := func(gtx layout.Context) layout.Dimensions { return layout.Dimensions{Size: image.Pt(100, 40)} }
 
 	props := Props{
-		Body:    body,
-		Actions: []layout.Widget{action, action},
-		OnClose: func(_ layout.Context) {},
+		Body:            body,
+		Actions:         []layout.Widget{actA, actB},
+		ActionFocusTags: []event.Tag{&clkA, &clkB},
+		OnClose:         func(_ layout.Context) {},
 	}
-	st := newState(len(props.Actions))
+	st := newState()
 	st.pushed = true
 	st.wantInitialFocus = true
 	stackPush(st.id)
@@ -129,6 +137,30 @@ func liveCloseWidget(t *testing.T, st *modalState, shaper *text.Shaper) layout.W
 	}
 	if w == nil {
 		t.Fatal("close button did not emit a widget")
+	}
+	return w
+}
+
+// liveButton subscribes to a labelled button.Button keyed to a caller-owned
+// clickable and returns its latest emitted widget — a focusable footer action
+// whose own &clk is passed in Props.ActionFocusTags.
+func liveButton(t *testing.T, shaper *text.Shaper, label string, clk *widget.Clickable) layout.Widget {
+	t.Helper()
+	obs := button.Button(rx.Of(theme.Default()), button.Props{
+		Label:     label,
+		Clickable: clk,
+		Shaper:    shaper,
+	})
+	var w layout.Widget
+	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+		if !done && next != nil {
+			w = next
+		}
+	}, rx.NewScheduler()).Wait(); err != nil {
+		t.Fatalf("button action subscribe: %v", err)
+	}
+	if w == nil {
+		t.Fatal("button action did not emit a widget")
 	}
 	return w
 }

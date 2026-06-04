@@ -1,8 +1,11 @@
-// Command gallery shows the Cadence Modal in action so the GX.4 close
-// affordance — now a prism/button icon-only variant — can be exercised live:
-// hover the × for the Primary hover overlay, Tab to it for the focus ring,
-// then click it, press Enter/Space while focused, press Escape, or click the
-// dimmed backdrop to dismiss. Click "Open dialog" to bring it back.
+// Command gallery shows the Cadence Modal in action. The header close
+// affordance (GX.4) and the footer Cancel/OK actions (GX.5) are all
+// prism/button instances that own their own focus ring; the modal sequences
+// them into one Tab cycle (× → Cancel → OK → ×) via Props.ActionFocusTags.
+//
+// Exercise it: hover the × for the Primary overlay; press Tab to move the focus
+// ring across the controls; activate any with Enter/Space; press Escape or
+// click the dimmed backdrop to dismiss; click "Open dialog" to bring it back.
 //
 // Run from the repo root: go run ./cadence/modal/gallery
 package main
@@ -10,7 +13,6 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"log"
 	"os"
 	"sync"
@@ -18,6 +20,7 @@ import (
 	"gioui.org/app"
 	"gioui.org/font"
 	"gioui.org/font/gofont"
+	"gioui.org/io/event"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -56,6 +59,11 @@ type demo struct {
 	openObserver rx.Observer[bool]
 	openBtn      layout.Widget
 
+	// Footer action clickables — caller-owned so they double as the actions'
+	// focus tags (passed to the modal via Props.ActionFocusTags).
+	cancelClk widget.Clickable
+	okClk     widget.Clickable
+
 	mu          sync.Mutex
 	modalWidget layout.Widget
 	closes      int
@@ -84,25 +92,48 @@ func run(w *app.Window) error {
 		return err
 	}
 
-	// Live modal. OnClose flows back through the Open subject so the dialog
-	// actually hides, and bumps a visible counter so each dismissal is obvious.
-	light := tokens.DefaultLight
+	// Dismiss the dialog: bump a visible counter and drive Open false so the
+	// modal actually hides. Shared by the close button, Escape/backdrop
+	// (Props.OnClose), and the footer actions' own OnClick.
+	closeDialog := func() {
+		d.mu.Lock()
+		d.closes++
+		d.mu.Unlock()
+		d.openObserver.Next(false)
+		w.Invalidate()
+	}
+
+	// Footer actions are prism/buttons keyed to caller-owned clickables. Each
+	// draws its own focus ring; passing &clickable in ActionFocusTags adds it
+	// to the modal's Tab cycle with no doubled outer ring (GX.5).
+	cancelBtn, err := button.Button(th, button.Props{
+		Label:     "Cancel",
+		Shaper:    shaper,
+		Clickable: &d.cancelClk,
+		OnClick:   func(_ layout.Context) { closeDialog() },
+	}).First()
+	if err != nil {
+		return err
+	}
+	okBtn, err := button.Button(th, button.Props{
+		Label:     "OK",
+		Shaper:    shaper,
+		Clickable: &d.okClk,
+		OnClick:   func(_ layout.Context) { closeDialog() },
+	}).First()
+	if err != nil {
+		return err
+	}
+
+	// Live modal. OnClose (close button, Escape, backdrop) also dismisses.
 	modalObs := modal.Modal(th, modal.Props{
-		Open:  openObs,
-		Title: "Confirm action",
-		Body:  d.body,
-		Actions: []layout.Widget{
-			d.actionChip("Cancel", light.SurfaceVariant, light.OnSurfaceVariant),
-			d.actionChip("OK", light.Primary, light.OnPrimary),
-		},
-		Shaper: shaper,
-		OnClose: func(_ layout.Context) {
-			d.mu.Lock()
-			d.closes++
-			d.mu.Unlock()
-			d.openObserver.Next(false)
-			w.Invalidate()
-		},
+		Open:            openObs,
+		Title:           "Confirm action",
+		Body:            d.body,
+		Actions:         []layout.Widget{footerSlot(cancelBtn), footerSlot(okBtn)},
+		ActionFocusTags: []event.Tag{&d.cancelClk, &d.okClk},
+		Shaper:          shaper,
+		OnClose:         func(_ layout.Context) { closeDialog() },
 	})
 	sub := modalObs.Subscribe(func(mw layout.Widget, _ error, done bool) {
 		if !done && mw != nil {
@@ -144,30 +175,14 @@ func (d *demo) body(gtx layout.Context) layout.Dimensions {
 		mat)
 }
 
-// actionChip is a static footer control: a filled rounded rect with a centered
-// label. It is not independently interactive — the modal wraps each action as a
-// Tab focus stop and draws the focus ring around it — so two chips are enough to
-// make Tab focus-cycling visible (× → Cancel → OK → ×).
-func (d *demo) actionChip(label string, fill, fg color.NRGBA) layout.Widget {
+// footerSlot constrains an otherwise fill-width button to a compact fixed width
+// so the footer shows two right-aligned buttons rather than one stretched bar.
+// It only sets the width budget; the wrapped button still owns its focus tag.
+func footerSlot(w layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		sz := image.Pt(gtx.Dp(unit.Dp(96)), gtx.Dp(unit.Dp(40)))
-		rad := gtx.Dp(unit.Dp(8))
-		rr := clip.RRect{Rect: image.Rectangle{Max: sz}, SE: rad, SW: rad, NE: rad, NW: rad}
-		paint.FillShape(gtx.Ops, fill, rr.Op(gtx.Ops))
-
-		m := op.Record(gtx.Ops)
-		paint.ColorOp{Color: fg}.Add(gtx.Ops)
-		mat := m.Stop()
-		lblGtx := gtx
-		lblGtx.Constraints.Min = image.Point{}
-		rec := op.Record(gtx.Ops)
-		lbl := widget.Label{MaxLines: 1, Alignment: text.Middle}
-		ld := lbl.Layout(lblGtx, d.shaper, font.Font{}, unit.Sp(14), label, mat)
-		call := rec.Stop()
-		off := op.Offset(image.Pt((sz.X-ld.Size.X)/2, (sz.Y-ld.Size.Y)/2)).Push(gtx.Ops)
-		call.Add(gtx.Ops)
-		off.Pop()
-		return layout.Dimensions{Size: sz}
+		gtx.Constraints.Min.X = 0
+		gtx.Constraints.Max.X = gtx.Dp(unit.Dp(110))
+		return w(gtx)
 	}
 }
 
