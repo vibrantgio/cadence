@@ -11,8 +11,7 @@ require (
 	github.com/vibrantgio/prism/list v0.0.0
 	github.com/vibrantgio/prism/theme v0.0.0
 	github.com/vibrantgio/prism/tokens v0.0.0
-	github.com/vibrantgio/pulse/depth v0.0.0
-	github.com/vibrantgio/pulse/tween v0.0.0
+	github.com/vibrantgio/pulse v0.0.0
 )
 
 require (
@@ -40,6 +39,5 @@ replace (
 	github.com/vibrantgio/prism/list => ../prism/list
 	github.com/vibrantgio/prism/theme => ../prism/theme
 	github.com/vibrantgio/prism/tokens => ../prism/tokens
-	github.com/vibrantgio/pulse/depth => ../pulse/depth
-	github.com/vibrantgio/pulse/tween => ../pulse/tween
+	github.com/vibrantgio/pulse => ../pulse
 )
