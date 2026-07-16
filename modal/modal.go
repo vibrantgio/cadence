@@ -62,6 +62,11 @@ type Props struct {
 	OnClose func(gtx layout.Context)
 	Actions []layout.Widget
 
+	// HideClose, when true, omits the top-right close button. Use it when
+	// the footer Actions already provide explicit dismissal (e.g. a Cancel
+	// button) — Escape and a scrim click still trigger OnClose.
+	HideClose bool
+
 	// ActionFocusTags lists the focus tags of the focusable Actions, in the
 	// order they should join the modal's Tab cycle (after the close button).
 	//
@@ -122,13 +127,16 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 		// through the button's OnClick. Build once here in the rx.Defer scope
 		// and fold the latest emitted widget into the input pipeline — never
 		// subscribe inside the per-frame widget closure.
-		closeBtn := button.Button(th, button.Props{
-			Icon:        crossIcon,
-			Description: "Close",
-			Clickable:   &st.closeClick,
-			OnClick:     props.OnClose,
-			Shaper:      shaper,
-		})
+		closeBtn := rx.Of[layout.Widget](nil)
+		if !props.HideClose {
+			closeBtn = button.Button(th, button.Props{
+				Icon:        crossIcon,
+				Description: "Close",
+				Clickable:   &st.closeClick,
+				OnClick:     props.OnClose,
+				Shaper:      shaper,
+			})
+		}
 
 		inputs := rx.CombineLatest3(resolved, open, closeBtn)
 
@@ -178,7 +186,10 @@ func Render(
 	// uses, rendered through button.RenderIcon so goldens stay text-free and
 	// deterministic. Radius is threaded straight through (callers pass a sharp
 	// radius for golden determinism).
-	closeW := button.RenderIcon(crossIcon, colors, sp, rad, ts, button.RenderState{})
+	var closeW layout.Widget
+	if !props.HideClose {
+		closeW = button.RenderIcon(crossIcon, colors, sp, rad, ts, button.RenderState{})
+	}
 	return func(gtx layout.Context) layout.Dimensions {
 		if !open {
 			return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -208,10 +219,13 @@ func newState() *modalState {
 	return &modalState{id: allocStackID()}
 }
 
-// focusCount returns the number of focusable elements: 1 (close button)
-// plus one per non-nil caller-declared action focus tag.
+// focusCount returns the number of focusable elements: the close button
+// (unless hidden) plus one per non-nil caller-declared action focus tag.
 func focusCount(props Props) int {
-	n := 1
+	n := 0
+	if !props.HideClose {
+		n = 1
+	}
 	for _, t := range props.ActionFocusTags {
 		if t != nil {
 			n++
@@ -246,16 +260,32 @@ func drawModal(
 	}
 	scrimClip.Pop()
 
-	// Surface size — clamp to canvas. The desired surface is 75% of canvas
-	// in each axis, clamped to a sensible min/max in dp.
+	// Surface width — 75% of canvas clamped to a sensible min/max in dp.
+	// Height HUGS THE CONTENT: the content is laid out once into a macro
+	// (stateful widgets process their events exactly once), the surface is
+	// sized to the recorded dims, and the macro is replayed inside the
+	// positioned surface. maxH caps the surface at the old 75%-of-canvas
+	// bound; overflowing content is clipped to the surface.
 	surfW := clampInt(canvas.X*3/4, gtx.Dp(unit.Dp(180)), gtx.Dp(unit.Dp(560)))
-	surfH := clampInt(canvas.Y*3/4, gtx.Dp(unit.Dp(120)), gtx.Dp(unit.Dp(420)))
 	if surfW > canvas.X {
 		surfW = canvas.X
 	}
-	if surfH > canvas.Y {
-		surfH = canvas.Y
+	maxH := clampInt(canvas.Y*3/4, gtx.Dp(unit.Dp(120)), gtx.Dp(unit.Dp(420)))
+	if maxH > canvas.Y {
+		maxH = canvas.Y
 	}
+	inset := gtx.Dp(unit.Dp(tok.spacing.S5))
+
+	contentGtx := gtx
+	contentGtx.Constraints = layout.Constraints{
+		Min: image.Pt(surfW-2*inset, 0),
+		Max: image.Pt(surfW-2*inset, maxH-2*inset),
+	}
+	contentMacro := op.Record(gtx.Ops)
+	contentDims := drawSurfaceContents(contentGtx, shaper, props, tok, gap, closeWidget)
+	content := contentMacro.Stop()
+
+	surfH := clampInt(contentDims.Size.Y+2*inset, gtx.Dp(unit.Dp(120)), maxH)
 	surfPos := image.Pt((canvas.X-surfW)/2, (canvas.Y-surfH)/2)
 
 	// Surface — rounded rectangle, registered as a pointer absorber so
@@ -275,13 +305,13 @@ func drawModal(
 		absorbClip.Pop()
 	}
 
-	// Surface inset content (header / body / footer).
-	contentGtx := gtx
-	contentGtx.Constraints = layout.Exact(image.Pt(surfW, surfH))
-	contentGtx.Constraints.Min = image.Point{}
-	layout.UniformInset(unit.Dp(tok.spacing.S5)).Layout(contentGtx, func(gtx layout.Context) layout.Dimensions {
-		return drawSurfaceContents(gtx, shaper, props, tok, gap, closeWidget)
-	})
+	// Surface inset content (header / body / footer) — the macro recorded
+	// above, replayed at the inset origin and clipped to the surface.
+	contentClip := clip.Rect{Max: image.Pt(surfW, surfH)}.Push(gtx.Ops)
+	contentOff := op.Offset(image.Pt(inset, inset)).Push(gtx.Ops)
+	content.Add(gtx.Ops)
+	contentOff.Pop()
+	contentClip.Pop()
 	off.Pop()
 
 	if live {
@@ -309,9 +339,7 @@ func drawSurfaceContents(
 		layout.Rigid(spacerV(gap)),
 	}
 	if props.Body != nil {
-		children = append(children, layout.Flexed(1, props.Body))
-	} else {
-		children = append(children, layout.Flexed(1, emptyFlex()))
+		children = append(children, layout.Rigid(props.Body))
 	}
 	if footer != nil {
 		children = append(children, layout.Rigid(spacerV(gap)))
@@ -338,6 +366,9 @@ func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, closeWid
 			wl := widget.Label{MaxLines: 1}
 			return wl.Layout(gtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(tok.typ.TitleMedium), props.Title, material)
 		})
+		if closeWidget == nil {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, titleFlex)
+		}
 		closeFlex := layout.Rigid(closeWidget)
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, titleFlex, closeFlex)
 	}
@@ -475,7 +506,9 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 // modal only sequences them for Tab cycling and the Escape trap.
 func focusTags(props Props, st *modalState) []event.Tag {
 	tags := make([]event.Tag, 0, focusCount(props))
-	tags = append(tags, &st.closeClick)
+	if !props.HideClose {
+		tags = append(tags, &st.closeClick)
+	}
 	for _, t := range props.ActionFocusTags {
 		if t != nil {
 			tags = append(tags, t)
