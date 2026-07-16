@@ -164,3 +164,25 @@ func liveButton(t *testing.T, shaper *text.Shaper, label string, clk *widget.Cli
 	}
 	return w
 }
+
+// TestFocusTagsIncludesDynamicBeforeStatic locks the Tab-cycle order:
+// close button (unless hidden), then DynamicFocusTags, then ActionFocusTags.
+func TestFocusTagsIncludesDynamicBeforeStatic(t *testing.T) {
+	var dyn, act int
+	st := newState()
+	props := Props{
+		HideClose:        true,
+		DynamicFocusTags: func() []event.Tag { return []event.Tag{&dyn} },
+		ActionFocusTags:  []event.Tag{&act},
+	}
+	tags := focusTags(props, st)
+	if len(tags) != 2 || tags[0] != &dyn || tags[1] != &act {
+		t.Fatalf("focusTags = %v, want [dynamic static]", tags)
+	}
+
+	props.HideClose = false
+	tags = focusTags(props, st)
+	if len(tags) != 3 || tags[0] != &st.closeClick || tags[1] != &dyn || tags[2] != &act {
+		t.Fatalf("focusTags with close = %v, want [close dynamic static]", tags)
+	}
+}

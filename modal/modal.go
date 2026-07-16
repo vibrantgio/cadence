@@ -67,6 +67,14 @@ type Props struct {
 	// button) — Escape and a scrim click still trigger OnClose.
 	HideClose bool
 
+	// DynamicFocusTags, if non-nil, is called every frame and its tags join
+	// the Tab cycle after the close button and BEFORE ActionFocusTags. Use
+	// it for focusables whose tags change across the modal's lifetime —
+	// e.g. a prism TextField rebuilt per open (its editor tag, exposed via
+	// TextFieldProps.FocusTag, is new each rebuild). The first tag in the
+	// cycle receives initial focus when the modal opens.
+	DynamicFocusTags func() []event.Tag
+
 	// ActionFocusTags lists the focus tags of the focusable Actions, in the
 	// order they should join the modal's Tab cycle (after the close button).
 	//
@@ -435,7 +443,11 @@ func processInput(gtx layout.Context, props Props, st *modalState) {
 	// transitions to true. Subsequent transitions are tracked by the rx
 	// pipeline; here we just consume the flag.
 	if st.wantInitialFocus {
-		gtx.Execute(key.FocusCmd{Tag: tags[0]})
+		// tags can be empty (HideClose with no action tags) — nothing to
+		// focus then, but never panic.
+		if len(tags) > 0 {
+			gtx.Execute(key.FocusCmd{Tag: tags[0]})
+		}
 		st.wantInitialFocus = false
 	}
 
@@ -515,6 +527,13 @@ func focusTags(props Props, st *modalState) []event.Tag {
 	tags := make([]event.Tag, 0, focusCount(props))
 	if !props.HideClose {
 		tags = append(tags, &st.closeClick)
+	}
+	if props.DynamicFocusTags != nil {
+		for _, t := range props.DynamicFocusTags() {
+			if t != nil {
+				tags = append(tags, t)
+			}
+		}
 	}
 	for _, t := range props.ActionFocusTags {
 		if t != nil {
