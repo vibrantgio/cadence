@@ -392,7 +392,14 @@ func footerWidget(props Props, tok resolvedTokens) layout.Widget {
 	gap := tok.spacing.S2
 
 	return func(gtx layout.Context) layout.Dimensions {
-		children := []layout.FlexChild{layout.Flexed(1, emptyFlex())}
+		// The right-alignment filler must claim NO cross-axis height: with a
+		// content-sized surface the row's Max.Y is all remaining space, and
+		// a Constraints.Max-sized filler would inflate the footer to fill it
+		// (the actions would float mid-surface over a sea of empty space).
+		filler := func(gtx layout.Context) layout.Dimensions {
+			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
+		}
+		children := []layout.FlexChild{layout.Flexed(1, filler)}
 		first := true
 		for _, a := range props.Actions {
 			a := a
@@ -565,15 +572,6 @@ func scrimColor(_ tokens.ColorTokens) color.NRGBA {
 func spacerV(hPx int) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		return layout.Dimensions{Size: image.Pt(0, hPx)}
-	}
-}
-
-// emptyFlex returns a widget that consumes its available constraints and
-// paints nothing. Used as a Flexed spacer in the footer row to right-
-// align the action group and as a fallback Body when Props.Body is nil.
-func emptyFlex() layout.Widget {
-	return func(gtx layout.Context) layout.Dimensions {
-		return layout.Dimensions{Size: gtx.Constraints.Max}
 	}
 }
 
