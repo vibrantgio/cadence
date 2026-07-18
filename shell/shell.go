@@ -2,7 +2,7 @@
 // application layout. Four variants are offered via Props.Layout —
 // SidebarHeaderMain composes a leading sidebar, a top navbar, and a
 // main content slot; SplitPane composes two slots separated by a
-// draggable vertical divider; ThreeColumn composes a full-width
+// draggable divider on either axis; ThreeColumn composes a full-width
 // top navbar, a leading sidebar, a main column, an optional resizable
 // trailing aside, and an optional footer strip; StackedPage composes a
 // pinned full-width navbar over a shell-owned vertical scroll of page
@@ -85,11 +85,20 @@ type Props struct {
 	Navbar  navbar.Props
 	Main    layout.Widget
 
-	// SplitPane slots.
+	// SplitPane slots. Left is the leading pane and Right the trailing
+	// pane; when SplitAxis is layout.Vertical, Left is the top pane and
+	// Right the bottom pane.
 	Left, Right layout.Widget
 
-	// SplitRatio drives the position of the vertical divider as a
-	// fraction in [0, 1]. A nil SplitRatio is treated as a constant 0.5.
+	// SplitAxis selects the axis along which Left and Right are
+	// arranged. The zero value (layout.Horizontal) places them side by
+	// side separated by a vertical divider; layout.Vertical stacks Left
+	// above Right separated by a horizontal divider.
+	SplitAxis layout.Axis
+
+	// SplitRatio drives the position of the divider as a fraction in
+	// [0, 1] along SplitAxis. A nil SplitRatio is treated as a
+	// constant 0.5.
 	SplitRatio rx.Observable[float32]
 
 	// OnSplitChange is invoked when the user drags the divider. The
@@ -189,7 +198,7 @@ func Render(
 ) layout.Widget {
 	switch props.Layout {
 	case SplitPane:
-		return staticSplitPane(props.Left, props.Right, splitRatio, colors)
+		return staticSplitPane(props.Left, props.Right, splitRatio, colors, props.SplitAxis)
 	case ThreeColumn:
 		return RenderThreeColumn(shaper, props, sidebarW, nil, colors, sp, ts, defaultAsideDp)
 	case StackedPage:
@@ -263,7 +272,7 @@ func composeSidebarHeaderMain(sb, nb, main layout.Widget) layout.Widget {
 // emissions for the lifetime of the Shell instance.
 type dragState struct {
 	tag      dragTag
-	pressX   float32 // pointer X at press, in local coords of the divider
+	press    float32 // pointer main-axis position at press, in shell-local coords
 	startR   float32 // ratio at press
 	active   bool
 	current  float32 // last seen ratio (from observable or drag)
@@ -296,25 +305,26 @@ func splitPaneObservable(th rx.Observable[theme.Theme], props Props) rx.Observab
 			}
 			left := props.Left
 			right := props.Right
+			axis := props.SplitAxis
 			onChange := props.OnSplitChange
 			return func(gtx layout.Context) layout.Dimensions {
-				processDrag(gtx, ds, onChange)
-				return drawSplitPane(gtx, ds.current, left, right, colors, ds)
+				processDrag(gtx, ds, axis, onChange)
+				return drawSplitPane(gtx, ds.current, left, right, colors, ds, axis)
 			}
 		})
 	})
 }
 
-func staticSplitPane(left, right layout.Widget, ratio float32, colors tokens.ColorTokens) layout.Widget {
+func staticSplitPane(left, right layout.Widget, ratio float32, colors tokens.ColorTokens, axis layout.Axis) layout.Widget {
 	r := clampRatio(ratio)
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawSplitPane(gtx, r, left, right, colors, nil)
+		return drawSplitPane(gtx, r, left, right, colors, nil, axis)
 	}
 }
 
-func processDrag(gtx layout.Context, ds *dragState, onChange func(gtx layout.Context, ratio float32)) {
-	totalW := float32(gtx.Constraints.Max.X)
-	if totalW <= 0 {
+func processDrag(gtx layout.Context, ds *dragState, axis layout.Axis, onChange func(gtx layout.Context, ratio float32)) {
+	total := float32(axis.Convert(gtx.Constraints.Max).X)
+	if total <= 0 {
 		return
 	}
 	for {
@@ -331,15 +341,15 @@ func processDrag(gtx layout.Context, ds *dragState, onChange func(gtx layout.Con
 		}
 		switch pe.Kind {
 		case pointer.Press:
-			ds.pressX = pe.Position.X
+			ds.press = axis.FConvert(pe.Position).X
 			ds.startR = ds.current
 			ds.active = true
 		case pointer.Drag:
 			if !ds.active {
 				continue
 			}
-			delta := pe.Position.X - ds.pressX
-			r := clampRatio(ds.startR + delta/totalW)
+			delta := axis.FConvert(pe.Position).X - ds.press
+			r := clampRatio(ds.startR + delta/total)
 			ds.current = r
 			if onChange != nil && (!ds.emitted || ds.lastEmit != r) {
 				ds.lastEmit = r
@@ -352,58 +362,72 @@ func processDrag(gtx layout.Context, ds *dragState, onChange func(gtx layout.Con
 	}
 }
 
+// drawSplitPane lays the panes along axis: for layout.Horizontal the
+// panes sit side by side separated by a vertical divider line; for
+// layout.Vertical they stack with a horizontal one. Geometry is
+// computed in main-axis terms and mapped back through axis.Convert.
 func drawSplitPane(
 	gtx layout.Context,
 	ratio float32,
 	left, right layout.Widget,
 	colors tokens.ColorTokens,
 	ds *dragState,
+	axis layout.Axis,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
-	dividerW := gtx.Dp(unit.Dp(dividerDp))
-	if dividerW < 1 {
-		dividerW = 1
+	total := axis.Convert(size).X
+	cross := axis.Convert(size).Y
+	dividerPx := gtx.Dp(unit.Dp(dividerDp))
+	if dividerPx < 1 {
+		dividerPx = 1
 	}
-	innerW := size.X - dividerW
-	if innerW < 0 {
-		innerW = 0
+	inner := total - dividerPx
+	if inner < 0 {
+		inner = 0
 	}
-	leftW := int(float32(innerW)*ratio + 0.5)
-	if leftW < 0 {
-		leftW = 0
+	leftPx := int(float32(inner)*ratio + 0.5)
+	if leftPx < 0 {
+		leftPx = 0
 	}
-	if leftW > innerW {
-		leftW = innerW
+	if leftPx > inner {
+		leftPx = inner
 	}
-	rightW := innerW - leftW
+	rightPx := inner - leftPx
 
 	// Background to make the divider visible even if Left/Right are nil.
 	paint.FillShape(gtx.Ops, colors.Surface, clip.Rect{Max: size}.Op())
 
-	// Left pane.
+	// Leading pane.
 	if left != nil {
 		st := op.Offset(image.Point{}).Push(gtx.Ops)
 		lgtx := gtx
-		lgtx.Constraints = layout.Exact(image.Pt(leftW, size.Y))
+		lgtx.Constraints = layout.Exact(axis.Convert(image.Pt(leftPx, cross)))
 		left(lgtx)
 		st.Pop()
 	}
 
 	// Divider.
-	dividerRect := image.Rect(leftW, 0, leftW+dividerW, size.Y)
+	dividerRect := image.Rectangle{
+		Min: axis.Convert(image.Pt(leftPx, 0)),
+		Max: axis.Convert(image.Pt(leftPx+dividerPx, cross)),
+	}
 	paint.FillShape(gtx.Ops, dividerColor(colors), clip.Rect(dividerRect).Op())
 	if ds != nil {
 		area := clip.Rect(dividerRect).Push(gtx.Ops)
 		event.Op(gtx.Ops, &ds.tag)
-		pointer.CursorColResize.Add(gtx.Ops)
+		cursor := pointer.CursorColResize
+		if axis == layout.Vertical {
+			cursor = pointer.CursorRowResize
+		}
+		cursor.Add(gtx.Ops)
 		area.Pop()
 	}
 
-	// Right pane.
+	// Trailing pane.
 	if right != nil {
-		st := op.Offset(image.Pt(leftW+dividerW, 0)).Push(gtx.Ops)
+		st := op.Offset(axis.Convert(image.Pt(leftPx+dividerPx, 0))).Push(gtx.Ops)
 		rgtx := gtx
-		rgtx.Constraints = layout.Exact(image.Pt(rightW, size.Y))
+		rgtx.Constraints = layout.Exact(axis.Convert(image.Pt(rightPx, cross)))
 		right(rgtx)
 		st.Pop()
 	}

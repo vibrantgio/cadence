@@ -35,19 +35,22 @@ import (
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
 
 const (
-	shmW, shmH     = 480, 256 // sidebar-header-main canvas
-	splitW, splitH = 480, 128 // split-pane canvas
-	dragCanvasW    = 200
-	dragCanvasH    = 100
-	tabCanvasW     = 480
-	tabCanvasH     = 256
+	shmW, shmH       = 480, 256 // sidebar-header-main canvas
+	splitW, splitH   = 480, 128 // split-pane canvas
+	vsplitW, vsplitH = 128, 480 // vertical-axis split-pane canvas
+	dragCanvasW      = 200
+	dragCanvasH      = 100
+	tabCanvasW       = 480
+	tabCanvasH       = 256
 )
 
 var (
-	shmSize   = image.Pt(shmW, shmH)
-	splitSize = image.Pt(splitW, splitH)
-	dragSize  = image.Pt(dragCanvasW, dragCanvasH)
-	tabSize   = image.Pt(tabCanvasW, tabCanvasH)
+	shmSize    = image.Pt(shmW, shmH)
+	splitSize  = image.Pt(splitW, splitH)
+	vsplitSize = image.Pt(vsplitW, vsplitH)
+	dragSize   = image.Pt(dragCanvasW, dragCanvasH)
+	vdragSize  = image.Pt(dragCanvasH, dragCanvasW) // 100×200: tall canvas for Y drags
+	tabSize    = image.Pt(tabCanvasW, tabCanvasH)
 )
 
 func defaultShaper(t *testing.T) *text.Shaper {
@@ -106,11 +109,12 @@ func TestShellGolden(t *testing.T) {
 		}
 	}
 
-	splitProps := func() shell.Props {
+	splitProps := func(axis layout.Axis) shell.Props {
 		return shell.Props{
-			Layout: shell.SplitPane,
-			Left:   fillRect(leftFill),
-			Right:  fillRect(rightFill),
+			Layout:    shell.SplitPane,
+			Left:      fillRect(leftFill),
+			Right:     fillRect(rightFill),
+			SplitAxis: axis,
 		}
 	}
 
@@ -125,8 +129,9 @@ func TestShellGolden(t *testing.T) {
 	}{
 		{"light-sidebar-header-main", shmProps(), &shmSidebarProps, tokens.DefaultLight, lightBG, shmSize, 0},
 		{"dark-sidebar-header-main", shmProps(), &shmSidebarProps, tokens.DefaultDark, darkBG, shmSize, 0},
-		{"light-split-pane-50-50", splitProps(), nil, tokens.DefaultLight, lightBG, splitSize, 0.5},
-		{"light-split-pane-30-70", splitProps(), nil, tokens.DefaultLight, lightBG, splitSize, 0.3},
+		{"light-split-pane-50-50", splitProps(layout.Horizontal), nil, tokens.DefaultLight, lightBG, splitSize, 0.5},
+		{"light-split-pane-30-70", splitProps(layout.Horizontal), nil, tokens.DefaultLight, lightBG, splitSize, 0.3},
+		{"light-split-pane-vertical-30-70", splitProps(layout.Vertical), nil, tokens.DefaultLight, lightBG, vsplitSize, 0.3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -203,6 +208,47 @@ func TestShellSplitPaneDividerDrag(t *testing.T) {
 		pointer.Event{Kind: pointer.Release, Position: drag, Source: pointer.Touch},
 	)
 	driveFrame(w, ops, r, dragSize)
+
+	if len(got) == 0 {
+		t.Fatalf("OnSplitChange not invoked; want at least one update")
+	}
+	last := got[len(got)-1]
+	const want = 0.75
+	const eps = 0.01
+	if last < want-eps || last > want+eps {
+		t.Errorf("final ratio = %v; want ~%v", last, want)
+	}
+}
+
+// TestShellSplitPaneVerticalDividerDrag is the SplitAxis=Vertical
+// counterpart of TestShellSplitPaneDividerDrag. With PxPerDp=1 and a
+// 100×200 canvas at initial ratio 0.5, the horizontal divider (6 px
+// thick) sits at y ∈ [97, 103]. A press at (50, 100) followed by a
+// drag to (50, 150) shifts the ratio by 50/200 = +0.25, so the
+// expected new ratio is 0.75.
+func TestShellSplitPaneVerticalDividerDrag(t *testing.T) {
+	var got []float32
+	props := shell.Props{
+		Layout:        shell.SplitPane,
+		SplitAxis:     layout.Vertical,
+		SplitRatio:    rx.Of(float32(0.5)),
+		OnSplitChange: func(_ layout.Context, r float32) { got = append(got, r) },
+	}
+	w := liveWidget(t, shell.Shell(rx.Of(theme.Default()), props))
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+	driveFrame(w, ops, r, vdragSize)
+	driveFrame(w, ops, r, vdragSize)
+
+	press := f32.Pt(50, 100)
+	drag := f32.Pt(50, 150)
+	r.Queue(
+		pointer.Event{Kind: pointer.Press, Position: press, Source: pointer.Touch},
+		pointer.Event{Kind: pointer.Move, Position: drag, Source: pointer.Touch},
+		pointer.Event{Kind: pointer.Release, Position: drag, Source: pointer.Touch},
+	)
+	driveFrame(w, ops, r, vdragSize)
 
 	if len(got) == 0 {
 		t.Fatalf("OnSplitChange not invoked; want at least one update")
