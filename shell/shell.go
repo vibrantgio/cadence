@@ -1,10 +1,12 @@
 // Package shell provides the Cadence Shell pattern: a top-level
-// application layout. Three variants are offered via Props.Layout —
+// application layout. Four variants are offered via Props.Layout —
 // SidebarHeaderMain composes a leading sidebar, a top navbar, and a
 // main content slot; SplitPane composes two slots separated by a
-// draggable vertical divider; ThreeColumn composes a full-width top
-// navbar, a leading sidebar, a main column, an optional resizable
-// trailing aside, and an optional footer strip.
+// draggable vertical divider; ThreeColumn composes a full-width
+// top navbar, a leading sidebar, a main column, an optional resizable
+// trailing aside, and an optional footer strip; StackedPage composes a
+// pinned full-width navbar over a shell-owned vertical scroll of page
+// sections — the marketing-page shell.
 //
 // Shell follows the Phase 4 Composition contract: it is a callable
 // Go function consuming a Prism theme observable, returning a stream
@@ -58,6 +60,13 @@ const (
 	// layout; a nil Footer omits the bottom strip. Each column scrolls
 	// (or not) on its own — the shell hands every slot its full height.
 	ThreeColumn
+	// StackedPage renders a navbar pinned across the full top edge and
+	// the Sections slots stacked in a shell-owned vertical scroll
+	// region below it, with Footer appended after the last section so
+	// it scrolls with the content instead of pinning to the viewport.
+	// This is the marketing-page shell: hero, feature, pricing and
+	// testimonial sections slot in as Sections.
+	StackedPage
 )
 
 // Props configures a Shell. Fields not used by the chosen Layout are
@@ -112,6 +121,18 @@ type Props struct {
 	// OnAsideResize is invoked when the user drags the aside divider.
 	// The value is the new clamped width in dp. May be nil.
 	OnAsideResize func(gtx layout.Context, width unit.Dp)
+
+	// StackedPage slots. Navbar is shared with SidebarHeaderMain and
+	// ThreeColumn; Footer is shared with ThreeColumn, but here it
+	// scrolls with the content at its natural height instead of
+	// pinning to the viewport at a fixed height.
+	//
+	// Sections are stacked top to bottom in a scroll region owned by
+	// the shell. Each section spans the full page width and receives
+	// an unbounded height, so it must return its natural height.
+	// Sections own their internal max-width/centering — a full-bleed
+	// background with a centered inner column composes naturally.
+	Sections []layout.Widget
 }
 
 // Layout-affecting constants. The navbar and footer slots have fixed
@@ -141,6 +162,8 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 		return splitPaneObservable(th, props)
 	case ThreeColumn:
 		return threeColumnObservable(th, props)
+	case StackedPage:
+		return stackedPageObservable(th, props)
 	default:
 		return sidebarHeaderMainObservable(th, props)
 	}
@@ -153,6 +176,8 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 // directly (Props.Sidebar is not consulted). Pass nil sidebarW to render
 // an empty sidebar column. A ThreeColumn Props renders without an aside
 // column — use RenderThreeColumn to supply a pre-built aside widget.
+// StackedPage renders fully from Props (Sections and Footer are plain
+// widgets); sidebarW and splitRatio are ignored for it.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -167,6 +192,8 @@ func Render(
 		return staticSplitPane(props.Left, props.Right, splitRatio, colors)
 	case ThreeColumn:
 		return RenderThreeColumn(shaper, props, sidebarW, nil, colors, sp, ts, defaultAsideDp)
+	case StackedPage:
+		return staticStackedPage(shaper, props, colors, sp, ts)
 	default:
 		return staticSidebarHeaderMain(sidebarW, shaper, props, colors, sp, ts)
 	}
