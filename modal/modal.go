@@ -278,7 +278,9 @@ func drawModal(
 	if surfW > canvas.X {
 		surfW = canvas.X
 	}
-	maxH := clampInt(canvas.Y*3/4, gtx.Dp(unit.Dp(120)), gtx.Dp(unit.Dp(420)))
+	// 560dp (not the historical 420) so tall forms — e.g. an alert plus
+	// four fields plus actions — fit before the overflow clip engages.
+	maxH := clampInt(canvas.Y*3/4, gtx.Dp(unit.Dp(120)), gtx.Dp(unit.Dp(560)))
 	if maxH > canvas.Y {
 		maxH = canvas.Y
 	}
