@@ -35,12 +35,12 @@ import (
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
 
 const (
-	shmW, shmH       = 480, 256 // sidebar-header-main canvas
-	splitW, splitH   = 480, 128 // split-pane canvas
-	dragCanvasW      = 200
-	dragCanvasH      = 100
-	tabCanvasW       = 480
-	tabCanvasH       = 256
+	shmW, shmH     = 480, 256 // sidebar-header-main canvas
+	splitW, splitH = 480, 128 // split-pane canvas
+	dragCanvasW    = 200
+	dragCanvasH    = 100
+	tabCanvasW     = 480
+	tabCanvasH     = 256
 )
 
 var (
@@ -115,13 +115,13 @@ func TestShellGolden(t *testing.T) {
 	}
 
 	cases := []struct {
-		name       string
-		props      shell.Props
+		name         string
+		props        shell.Props
 		sidebarProps *sidebar.Props
-		colors     tokens.ColorTokens
-		bg         color.NRGBA
-		size       image.Point
-		ratio      float32
+		colors       tokens.ColorTokens
+		bg           color.NRGBA
+		size         image.Point
+		ratio        float32
 	}{
 		{"light-sidebar-header-main", shmProps(), &shmSidebarProps, tokens.DefaultLight, lightBG, shmSize, 0},
 		{"dark-sidebar-header-main", shmProps(), &shmSidebarProps, tokens.DefaultDark, darkBG, shmSize, 0},

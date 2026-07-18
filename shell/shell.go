@@ -1,8 +1,10 @@
 // Package shell provides the Cadence Shell pattern: a top-level
-// application layout. Two variants are offered via Props.Layout —
+// application layout. Three variants are offered via Props.Layout —
 // SidebarHeaderMain composes a leading sidebar, a top navbar, and a
 // main content slot; SplitPane composes two slots separated by a
-// draggable vertical divider.
+// draggable vertical divider; ThreeColumn composes a full-width top
+// navbar, a leading sidebar, a main column, an optional resizable
+// trailing aside, and an optional footer strip.
 //
 // Shell follows the Phase 4 Composition contract: it is a callable
 // Go function consuming a Prism theme observable, returning a stream
@@ -46,6 +48,16 @@ const (
 	// SplitPane renders Left and Right slots separated by a draggable
 	// vertical divider whose position is governed by SplitRatio.
 	SplitPane
+	// ThreeColumn renders a navbar across the full width of the top
+	// edge (unlike SidebarHeaderMain, where the sidebar claims the full
+	// height and the navbar starts after it), then a leading sidebar, a
+	// flexed main column, and a trailing aside column separated from
+	// main by a draggable vertical divider, with an optional full-width
+	// footer strip along the bottom. A nil Aside omits the trailing
+	// column and its divider, degenerating into a header-first sidebar
+	// layout; a nil Footer omits the bottom strip. Each column scrolls
+	// (or not) on its own — the shell hands every slot its full height.
+	ThreeColumn
 )
 
 // Props configures a Shell. Fields not used by the chosen Layout are
@@ -74,16 +86,48 @@ type Props struct {
 	// OnSplitChange is invoked when the user drags the divider. The
 	// value is the new ratio in [0, 1]. May be nil.
 	OnSplitChange func(gtx layout.Context, ratio float32)
+
+	// ThreeColumn slots. Sidebar, Navbar and Main are shared with
+	// SidebarHeaderMain (see above).
+	//
+	// Aside is the trailing column widget stream — a comments panel, an
+	// inspector, or any other contextual surface. A nil Aside omits the
+	// column and its divider entirely.
+	Aside rx.Observable[layout.Widget]
+
+	// Footer is an optional full-width strip below the columns (a
+	// status or transport bar). It is laid out at a fixed footerHDp
+	// height; a nil Footer omits the strip.
+	Footer layout.Widget
+
+	// AsideWidth drives the width of the aside column as an absolute dp
+	// value. Unlike SplitRatio, a window resize keeps the aside at its
+	// width and lets the main column absorb the change — the right
+	// behaviour for annotation and inspector panels. Values are clamped
+	// to [minAsideDp, maxAsideDp]. A nil AsideWidth is treated as a
+	// constant defaultAsideDp. External updates win only while the user
+	// is not dragging the divider.
+	AsideWidth rx.Observable[unit.Dp]
+
+	// OnAsideResize is invoked when the user drags the aside divider.
+	// The value is the new clamped width in dp. May be nil.
+	OnAsideResize func(gtx layout.Context, width unit.Dp)
 }
 
-// Layout-affecting constants. The navbar slot has a fixed height so
-// the main area is deterministic; the divider has a fixed pixel width
-// large enough to register a hit area on touch pointers.
+// Layout-affecting constants. The navbar and footer slots have fixed
+// heights so the main area is deterministic; the divider has a fixed
+// pixel width large enough to register a hit area on touch pointers.
+// The aside column tracks an absolute dp width clamped to
+// [minAsideDp, maxAsideDp].
 const (
-	navbarHDp   = 64
-	dividerDp   = 6
-	minRatio    = 0.05
-	maxRatio    = 0.95
+	navbarHDp      = 64
+	footerHDp      = 48
+	dividerDp      = 6
+	minRatio       = 0.05
+	maxRatio       = 0.95
+	minAsideDp     = 160
+	maxAsideDp     = 640
+	defaultAsideDp = 320
 )
 
 // Shell returns an rx.Observable[layout.Widget] that emits a new
@@ -95,6 +139,8 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 	switch props.Layout {
 	case SplitPane:
 		return splitPaneObservable(th, props)
+	case ThreeColumn:
+		return threeColumnObservable(th, props)
 	default:
 		return sidebarHeaderMainObservable(th, props)
 	}
@@ -105,7 +151,8 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 // static demonstrations; production code should use Shell. splitRatio
 // is honoured by SplitPane; SidebarHeaderMain uses the supplied sidebarW
 // directly (Props.Sidebar is not consulted). Pass nil sidebarW to render
-// an empty sidebar column.
+// an empty sidebar column. A ThreeColumn Props renders without an aside
+// column — use RenderThreeColumn to supply a pre-built aside widget.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -118,6 +165,8 @@ func Render(
 	switch props.Layout {
 	case SplitPane:
 		return staticSplitPane(props.Left, props.Right, splitRatio, colors)
+	case ThreeColumn:
+		return RenderThreeColumn(shaper, props, sidebarW, nil, colors, sp, ts, defaultAsideDp)
 	default:
 		return staticSidebarHeaderMain(sidebarW, shaper, props, colors, sp, ts)
 	}
@@ -186,13 +235,13 @@ func composeSidebarHeaderMain(sb, nb, main layout.Widget) layout.Widget {
 // dragState is captured once per subscription and survives all
 // emissions for the lifetime of the Shell instance.
 type dragState struct {
-	tag       dragTag
-	pressX    float32 // pointer X at press, in local coords of the divider
-	startR    float32 // ratio at press
-	active    bool
-	current   float32 // last seen ratio (from observable or drag)
-	lastEmit  float32 // last ratio passed to OnSplitChange
-	emitted   bool
+	tag      dragTag
+	pressX   float32 // pointer X at press, in local coords of the divider
+	startR   float32 // ratio at press
+	active   bool
+	current  float32 // last seen ratio (from observable or drag)
+	lastEmit float32 // last ratio passed to OnSplitChange
+	emitted  bool
 }
 
 // dragTag is a non-zero-size type so its address is a unique event
