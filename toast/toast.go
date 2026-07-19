@@ -37,6 +37,7 @@ import (
 	"github.com/vibrantgio/prism/coordination"
 	"github.com/vibrantgio/prism/theme"
 	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/pulse/depth"
 	"github.com/vibrantgio/pulse/tween"
 )
 
@@ -370,8 +371,13 @@ func paintStack(
 	return layout.Dimensions{Size: canvas}
 }
 
-// paintToast paints one tinted-Surface row sized to its content. The
-// fade alpha is applied to the surface fill and the text colour.
+// paintToast paints one elevated, tinted row sized to its content: a
+// Level3 cast shadow under a SurfaceVariant fill tinted 20% with the
+// level accent, ringed by a 1dp accent outline. The Surface-based 12%
+// tint this replaces sat at ~1.2:1 against Surface-painted panes (and
+// 1.01:1 against SurfaceVariant ones in dark themes) — the toast only
+// read as a shape because of its outline. The fade alpha is applied to
+// the shadow (via PushOpacity), the fill, and the text colour.
 func paintToast(
 	gtx layout.Context,
 	shaper *text.Shaper,
@@ -386,7 +392,7 @@ func paintToast(
 	alpha := fadeAlpha(it, lifetime, now)
 
 	accent := accentColor(it.toast.Level, tok.color)
-	fill := withAlpha(tintSurface(tok.color.Surface, accent), alpha)
+	fill := withAlpha(tintSurface(tok.color.SurfaceVariant, accent), alpha)
 	outline := withAlpha(accent, alpha)
 	fg := withAlpha(tok.color.OnSurface, alpha)
 
@@ -408,6 +414,12 @@ func paintToast(
 	if h < gtx.Constraints.Min.Y {
 		h = gtx.Constraints.Min.Y
 	}
+
+	// The shadow, not the fill, separates the toast on dark themes; it
+	// shares the toast's fade so it never outlives the surface.
+	opacity := paint.PushOpacity(gtx.Ops, float32(alpha))
+	depth.Shadow(gtx, image.Rectangle{Max: image.Pt(w, h)}, tokens.Level3)
+	opacity.Pop()
 
 	rect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(w, h)}, SE: r, SW: r, NE: r, NW: r}
 	paint.FillShape(gtx.Ops, fill, rect.Op(gtx.Ops))
@@ -487,8 +499,11 @@ func localAccent(c tokens.ColorTokens, lightShade, darkShade color.NRGBA) color.
 
 func luminance(c color.NRGBA) int { return int(c.R) + int(c.G) + int(c.B) }
 
-func tintSurface(surface, accent color.NRGBA) color.NRGBA {
-	return blend(surface, accent, 0x1F)
+// tintSurface blends 20% of the accent over the given base. Strong
+// enough that the fill itself separates from Surface-painted panes;
+// paired with the SurfaceVariant base in paintToast.
+func tintSurface(base, accent color.NRGBA) color.NRGBA {
+	return blend(base, accent, 0x33)
 }
 
 func blend(base, over color.NRGBA, alpha uint8) color.NRGBA {

@@ -51,11 +51,16 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 
 // TestStackGolden records or diffs the three Measurable goldens. Empty
 // text avoids non-deterministic font rasterisation; variant tint and
-// stack ordering are the load-bearing visual signal.
+// stack ordering are the load-bearing visual signal. The scenes
+// composite over the theme's own Surface — the colour app panes are
+// painted with — so a toast fill that stops separating from real app
+// backgrounds fails the diff instead of hiding behind an arbitrary
+// grey (the regression that shipped the ~1.2:1 Surface-on-Surface
+// toast).
 func TestStackGolden(t *testing.T) {
 	shaper := defaultShaper(t)
-	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
-	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
+	lightBG := tokens.DefaultLight.Surface
+	darkBG := tokens.DefaultDark.Surface
 
 	cases := []struct {
 		name   string
