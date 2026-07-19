@@ -43,6 +43,11 @@ const (
 	Right
 )
 
+// outsideMargin is how far the outside-press absorber reaches beyond the
+// caller's canvas on every side. The popover cannot know the window bounds
+// from inside its canvas, so the margin is simply larger than any display.
+const outsideMargin = unit.Dp(8192)
+
 // Props configures a Popover. Anchor must be non-nil; Content may be nil
 // (the surface renders as an empty rounded rectangle of minimum size).
 // OnDismiss is invoked when (a) a pointer.Press lands outside both the
@@ -226,11 +231,17 @@ func drawPopover(
 		}
 	}
 
-	// 3. Outside-press absorber covering the full canvas. Registered first
-	//    so that anchor- and surface-clip tags (registered later) win for
-	//    presses inside their own bounds.
+	// 3. Outside-press absorber. The caller's canvas is often just the
+	//    anchor's box (the popover-canvas coupling), so the absorber extends
+	//    a wide margin beyond it on every side to catch presses anywhere in
+	//    the window. Registered first so that anchor- and surface-clip tags
+	//    (registered later) win for presses inside their own bounds.
 	if live {
-		outsideClip := clip.Rect{Max: canvas}.Push(gtx.Ops)
+		margin := gtx.Dp(outsideMargin)
+		outsideClip := clip.Rect{
+			Min: image.Pt(-margin, -margin),
+			Max: image.Pt(canvas.X+margin, canvas.Y+margin),
+		}.Push(gtx.Ops)
 		event.Op(gtx.Ops, &st.outsideTag)
 		outsideClip.Pop()
 	}

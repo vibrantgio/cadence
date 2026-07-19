@@ -205,6 +205,68 @@ func TestOutsideClickInvokesOnDismiss(t *testing.T) {
 	}
 }
 
+// TestOutsideClickDismissesWithChipSizedCanvas replicates the popover-
+// canvas coupling (mindchat's model picker): the caller hands the popover
+// an Exact anchor-sized box, so the anchor covers the whole canvas and an
+// outside press can only land beyond it. OnDismiss must still fire for a
+// press elsewhere in the window, and an anchor press must still be
+// absorbed silently.
+func TestOutsideClickDismissesWithChipSizedCanvas(t *testing.T) {
+	var dismissed int
+	chip := image.Pt(60, 28)
+	anchor := fixedRect(color.NRGBA{R: 80, G: 160, B: 220, A: 255}, 60, 28)
+	content := fixedRect(color.NRGBA{R: 120, G: 120, B: 120, A: 255}, 80, 36)
+
+	w := livePopover(t, popover.Props{
+		Open:      rx.Of(true),
+		Anchor:    anchor,
+		Content:   content,
+		Placement: popover.Bottom,
+		OnDismiss: func(_ layout.Context) { dismissed++ },
+	})
+
+	// The coupling: the popover is offset into a corner of the frame and
+	// constrained to exactly the chip's box.
+	chipPos := image.Pt(200, 8)
+	coupled := func(gtx layout.Context) layout.Dimensions {
+		size := gtx.Constraints.Max
+		defer op.Offset(chipPos).Push(gtx.Ops).Pop()
+		cg := gtx
+		cg.Constraints = layout.Exact(chip)
+		w(cg)
+		return layout.Dimensions{Size: size}
+	}
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+	driveFrame(coupled, ops, r, canvasSize)
+	driveFrame(coupled, ops, r, canvasSize)
+
+	// (1) Press far from the chip and from the surface hanging below it —
+	// outside the chip-sized canvas entirely. OnDismiss must fire.
+	far := f32.Pt(8, float32(canvasH-8))
+	r.Queue(
+		pointer.Event{Kind: pointer.Press, Position: far, Buttons: pointer.ButtonPrimary, Source: pointer.Mouse},
+		pointer.Event{Kind: pointer.Release, Position: far, Buttons: pointer.ButtonPrimary, Source: pointer.Mouse},
+	)
+	driveFrame(coupled, ops, r, canvasSize)
+	if dismissed == 0 {
+		t.Fatalf("press outside the chip-sized canvas did not invoke OnDismiss; dismissed = %d", dismissed)
+	}
+	outsideHits := dismissed
+
+	// (2) Press on the chip itself — the anchor absorber must win.
+	centre := f32.Pt(float32(chipPos.X+chip.X/2), float32(chipPos.Y+chip.Y/2))
+	r.Queue(
+		pointer.Event{Kind: pointer.Press, Position: centre, Buttons: pointer.ButtonPrimary, Source: pointer.Mouse},
+		pointer.Event{Kind: pointer.Release, Position: centre, Buttons: pointer.ButtonPrimary, Source: pointer.Mouse},
+	)
+	driveFrame(coupled, ops, r, canvasSize)
+	if dismissed != outsideHits {
+		t.Errorf("anchor press bled through to the outside-absorber; OnDismiss went from %d to %d", outsideHits, dismissed)
+	}
+}
+
 // TestArbitrationDismissesPriorPopover verifies the Specific contract that
 // opening a second popover dismisses the first via the prism/coordination
 // arbitration channel. We subscribe two live popovers (B after A), then
