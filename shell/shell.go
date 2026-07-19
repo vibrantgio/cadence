@@ -141,13 +141,22 @@ type Props struct {
 	// and Aside slots, so sections re-render on theme change without a
 	// layer-boundary adapter; the shell combines them and re-emits
 	// whenever any section emits. Nil entries render empty. Each
-	// section spans the full page width and receives an unbounded
-	// height, so it must return its natural height. Sections own their
-	// internal max-width/centering — a full-bleed background with a
-	// centered inner column composes naturally. The static Render path
-	// takes pre-built section widgets via RenderStackedPage instead
+	// section spans the full page width (less the ContentMaxWidth
+	// clamp, when set) and receives an unbounded height, so it must
+	// return its natural height. The static Render path takes
+	// pre-built section widgets via RenderStackedPage instead
 	// (Props.Sections is not consulted there).
 	Sections []rx.Observable[layout.Widget]
+
+	// ContentMaxWidth, when positive, clamps every section (and the
+	// scrolling Footer) to at most this width and centers the clamped
+	// column on the page; the navbar stays full-bleed. The zero value
+	// keeps sections at the full page width, in which case sections
+	// own their internal max-width/centering — a full-bleed background
+	// with a centered inner column composes naturally. Sections
+	// narrower than the page still paint the page Background in the
+	// side margins.
+	ContentMaxWidth unit.Dp
 }
 
 // Layout-affecting constants. The navbar and footer slots have fixed

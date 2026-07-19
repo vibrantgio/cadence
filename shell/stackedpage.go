@@ -42,8 +42,9 @@ func stackedPageObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 		return rx.Map(inputs, func(next rx.Tuple3[tokens.ColorTokens, layout.Widget, []layout.Widget]) layout.Widget {
 			colors, nbW, secW := next.First, next.Second, next.Third
 			footer := props.Footer
+			maxW := props.ContentMaxWidth
 			return func(gtx layout.Context) layout.Dimensions {
-				return drawStackedPage(gtx, nbW, secW, footer, colors, list)
+				return drawStackedPage(gtx, nbW, secW, footer, colors, maxW, list)
 			}
 		})
 	})
@@ -53,8 +54,8 @@ func stackedPageObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 // with pre-resolved tokens and no event processing. Intended for
 // golden-image testing and static demonstrations; production code
 // should use Shell. sections are pre-built widgets for the scroll
-// region (Props.Sections is not consulted); Footer is taken from props
-// and appended after the last section.
+// region (Props.Sections is not consulted); Footer and ContentMaxWidth
+// are taken from props, with Footer appended after the last section.
 func RenderStackedPage(
 	shaper *text.Shaper,
 	props Props,
@@ -66,8 +67,9 @@ func RenderStackedPage(
 	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
 	list := &layout.List{Axis: layout.Vertical}
 	footer := props.Footer
+	maxW := props.ContentMaxWidth
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawStackedPage(gtx, nbW, sections, footer, colors, list)
+		return drawStackedPage(gtx, nbW, sections, footer, colors, maxW, list)
 	}
 }
 
@@ -75,13 +77,16 @@ func RenderStackedPage(
 // (then Footer) in a vertical layout.List that owns scrolling and
 // clips to the viewport. The list preserves child order in the op
 // stream, so Tab focus traversal flows navbar → sections top to
-// bottom → footer; offscreen sections are not laid out at all.
+// bottom → footer; offscreen sections are not laid out at all. A
+// positive maxW clamps each scroll child to that width, centered on
+// the page.
 func drawStackedPage(
 	gtx layout.Context,
 	nb layout.Widget,
 	sections []layout.Widget,
 	footer layout.Widget,
 	colors tokens.ColorTokens,
+	maxW unit.Dp,
 	list *layout.List,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
@@ -104,6 +109,11 @@ func drawStackedPage(
 		children++
 	}
 	if bodyH > 0 && children > 0 {
+		contentW := size.X
+		if px := gtx.Dp(maxW); maxW > 0 && px < contentW {
+			contentW = px
+		}
+		margin := (size.X - contentW) / 2
 		st := op.Offset(image.Pt(0, navH)).Push(gtx.Ops)
 		bgtx := gtx
 		// Exact viewport constraints force every child to the full page
@@ -117,7 +127,22 @@ func drawStackedPage(
 			if w == nil {
 				return layout.Dimensions{}
 			}
-			return w(gtx)
+			if margin == 0 {
+				return w(gtx)
+			}
+			// Clamp the child to the content column and center it. The
+			// returned dimensions claim the full page width so the
+			// list's cross-axis geometry (and scrolling) is unchanged.
+			cgtx := gtx
+			cgtx.Constraints.Min.X = contentW
+			cgtx.Constraints.Max.X = contentW
+			off := op.Offset(image.Pt(margin, 0)).Push(gtx.Ops)
+			dims := w(cgtx)
+			off.Pop()
+			return layout.Dimensions{
+				Size:     image.Pt(size.X, dims.Size.Y),
+				Baseline: dims.Baseline,
+			}
 		})
 		st.Pop()
 	}

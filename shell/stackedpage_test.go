@@ -65,6 +65,8 @@ func TestShellStackedPageGolden(t *testing.T) {
 	}
 	short := []layout.Widget{band(s1Fill, 60), band(s2Fill, 60)}
 	overflow := []layout.Widget{band(s1Fill, 90), band(s2Fill, 90), band(s3Fill, 90)}
+	maxWProps := props(band(footFill, 40))
+	maxWProps.ContentMaxWidth = 240
 
 	cases := []struct {
 		name     string
@@ -76,11 +78,74 @@ func TestShellStackedPageGolden(t *testing.T) {
 		{"light-stacked-page-short", short, props(band(footFill, 40)), tokens.DefaultLight, lightBG},
 		{"light-stacked-page-overflow", overflow, props(band(footFill, 40)), tokens.DefaultLight, lightBG},
 		{"dark-stacked-page-overflow", overflow, props(band(footFill, 40)), tokens.DefaultDark, darkBG},
+		{"light-stacked-page-maxwidth", short, maxWProps, tokens.DefaultLight, lightBG},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			w := shell.RenderStackedPage(shaper, tc.props, tc.sections, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
 			renderGolden(t, tc.name, stackedSize, scene(w, tc.bg))
+		})
+	}
+}
+
+// TestShellStackedPageContentMaxWidth verifies that a positive
+// ContentMaxWidth hands sections exactly the clamped width and centers
+// the column on the page with the Background showing in the margins,
+// and that a clamp at or above the page width is a no-op.
+func TestShellStackedPageContentMaxWidth(t *testing.T) {
+	shaper := defaultShaper(t)
+	bandFill := color.NRGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff}
+
+	cases := []struct {
+		name  string
+		maxW  unit.Dp
+		wantW int
+	}{
+		{"clamped", 240, 240},
+		{"wider-than-page", 1000, stackedW},
+		{"zero", 0, stackedW},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotMin, gotMax int
+			section := func(gtx layout.Context) layout.Dimensions {
+				gotMin = gtx.Constraints.Min.X
+				gotMax = gtx.Constraints.Max.X
+				return band(bandFill, 60)(gtx)
+			}
+			props := shell.Props{
+				Layout:          shell.StackedPage,
+				Navbar:          navbar.Props{Shaper: shaper},
+				ContentMaxWidth: tc.maxW,
+			}
+			w := shell.RenderStackedPage(shaper, props, []layout.Widget{section},
+				tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+			img := capture(t, stackedSize, w)
+			if img == nil {
+				return
+			}
+			if gotMin != tc.wantW || gotMax != tc.wantW {
+				t.Fatalf("section width constraints: min %d max %d; want exactly %d", gotMin, gotMax, tc.wantW)
+			}
+
+			eq := func(c color.RGBA, n color.NRGBA) bool {
+				return c.R == n.R && c.G == n.G && c.B == n.B && c.A == n.A
+			}
+			margin := (stackedW - tc.wantW) / 2
+			y := 64 + 30 // mid-band: navbar height + half the 60 px section
+			bg := tokens.DefaultLight.Background
+			if margin > 0 {
+				for _, x := range []int{0, margin - 1, margin + tc.wantW, stackedW - 1} {
+					if got := img.RGBAAt(x, y); !eq(got, bg) {
+						t.Errorf("margin pixel (%d,%d) = %v; want Background %v", x, y, got, bg)
+					}
+				}
+			}
+			for _, x := range []int{margin, margin + tc.wantW/2, margin + tc.wantW - 1} {
+				if got := img.RGBAAt(x, y); !eq(got, bandFill) {
+					t.Errorf("content pixel (%d,%d) = %v; want band %v", x, y, got, bandFill)
+				}
+			}
 		})
 	}
 }
