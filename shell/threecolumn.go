@@ -56,20 +56,30 @@ func threeColumnObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 		ds := &asideDragState{current: defaultAsideDp}
 		return rx.Map(inputs, func(next rx.Tuple5[tokens.ColorTokens, layout.Widget, layout.Widget, layout.Widget, unit.Dp]) layout.Widget {
 			colors, sbW, nbW, asW, wdp := next.First, next.Second, next.Third, next.Fourth, next.Fifth
-			// External width updates win when the user isn't actively
-			// dragging — otherwise the displayed width would jump back to
-			// whatever the caller most recently fed in mid-drag.
-			if !ds.active {
-				ds.current = clampAsideWidth(wdp)
-			}
+			ext := clampAsideWidth(wdp)
 			if asW == nil {
 				asW = emptyWidget
 			}
 			main := props.Main
 			footer := props.Footer
 			onResize := props.OnAsideResize
+			// applied defers the external-width hand-off to the widget:
+			// asideDragState must only ever be touched on the frame
+			// goroutine. This projector runs on the rx scheduler, so
+			// writing ds here races with processAsideDrag and
+			// drawThreeColumn during layout.
+			applied := false
 			return func(gtx layout.Context) layout.Dimensions {
 				if hasAside {
+					// External width updates win when the user isn't
+					// actively dragging — otherwise the displayed width
+					// would jump back to whatever the caller most recently
+					// fed in mid-drag. An emission arriving mid-drag is
+					// applied on the first frame after release.
+					if !applied && !ds.active {
+						ds.current = ext
+						applied = true
+					}
 					processAsideDrag(gtx, ds, onResize)
 				}
 				return drawThreeColumn(gtx, nbW, sbW, main, asW, footer, ds.current, colors, ds, hasAside)

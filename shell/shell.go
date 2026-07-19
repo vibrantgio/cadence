@@ -296,18 +296,27 @@ func splitPaneObservable(th rx.Observable[theme.Theme], props Props) rx.Observab
 	return rx.Defer(func() rx.Observable[layout.Widget] {
 		ds := &dragState{current: 0.5}
 		return rx.Map(inputs, func(next rx.Tuple2[tokens.ColorTokens, float32]) layout.Widget {
-			colors, r := next.First, next.Second
-			// External ratio updates win when the user isn't actively
-			// dragging — otherwise the displayed position would jump back
-			// to whatever the caller most recently fed in mid-drag.
-			if !ds.active {
-				ds.current = clampRatio(r)
-			}
+			colors := next.First
+			ext := clampRatio(next.Second)
 			left := props.Left
 			right := props.Right
 			axis := props.SplitAxis
 			onChange := props.OnSplitChange
+			// applied defers the external-ratio hand-off to the widget:
+			// dragState must only ever be touched on the frame goroutine.
+			// This projector runs on the rx scheduler, so writing ds here
+			// races with processDrag/drawSplitPane during layout.
+			applied := false
 			return func(gtx layout.Context) layout.Dimensions {
+				// External ratio updates win when the user isn't actively
+				// dragging — otherwise the displayed position would jump
+				// back to whatever the caller most recently fed in
+				// mid-drag. An emission arriving mid-drag is applied on
+				// the first frame after release.
+				if !applied && !ds.active {
+					ds.current = ext
+					applied = true
+				}
 				processDrag(gtx, ds, axis, onChange)
 				return drawSplitPane(gtx, ds.current, left, right, colors, ds, axis)
 			}
