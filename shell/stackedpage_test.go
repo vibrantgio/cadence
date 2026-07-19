@@ -3,7 +3,9 @@ package shell_test
 import (
 	"image"
 	"image/color"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"gioui.org/f32"
 	gioinput "gioui.org/io/input"
@@ -54,30 +56,30 @@ func TestShellStackedPageGolden(t *testing.T) {
 	s3Fill := color.NRGBA{R: 0x22, G: 0x55, B: 0x88, A: 0xff}
 	footFill := color.NRGBA{R: 0x66, G: 0x33, B: 0x99, A: 0xff}
 
-	props := func(sections []layout.Widget, footer layout.Widget) shell.Props {
+	props := func(footer layout.Widget) shell.Props {
 		return shell.Props{
-			Layout:   shell.StackedPage,
-			Navbar:   navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
-			Sections: sections,
-			Footer:   footer,
+			Layout: shell.StackedPage,
+			Navbar: navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
+			Footer: footer,
 		}
 	}
 	short := []layout.Widget{band(s1Fill, 60), band(s2Fill, 60)}
 	overflow := []layout.Widget{band(s1Fill, 90), band(s2Fill, 90), band(s3Fill, 90)}
 
 	cases := []struct {
-		name   string
-		props  shell.Props
-		colors tokens.ColorTokens
-		bg     color.NRGBA
+		name     string
+		sections []layout.Widget
+		props    shell.Props
+		colors   tokens.ColorTokens
+		bg       color.NRGBA
 	}{
-		{"light-stacked-page-short", props(short, band(footFill, 40)), tokens.DefaultLight, lightBG},
-		{"light-stacked-page-overflow", props(overflow, band(footFill, 40)), tokens.DefaultLight, lightBG},
-		{"dark-stacked-page-overflow", props(overflow, band(footFill, 40)), tokens.DefaultDark, darkBG},
+		{"light-stacked-page-short", short, props(band(footFill, 40)), tokens.DefaultLight, lightBG},
+		{"light-stacked-page-overflow", overflow, props(band(footFill, 40)), tokens.DefaultLight, lightBG},
+		{"dark-stacked-page-overflow", overflow, props(band(footFill, 40)), tokens.DefaultDark, darkBG},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := shell.Render(shaper, tc.props, nil, tc.colors, tokens.Spacing, tokens.DefaultTypeScale, 0)
+			w := shell.RenderStackedPage(shaper, tc.props, tc.sections, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
 			renderGolden(t, tc.name, stackedSize, scene(w, tc.bg))
 		})
 	}
@@ -91,14 +93,14 @@ func TestShellStackedPageGolden(t *testing.T) {
 // the window covers sections 2–4 and section 0 must not be laid out.
 func TestShellStackedPageScrolls(t *testing.T) {
 	laid := make([]int, 5)
-	sections := make([]layout.Widget, 5)
+	sections := make([]rx.Observable[layout.Widget], 5)
 	for i := range sections {
 		i := i
 		inner := band(color.NRGBA{R: uint8(40 * (i + 1)), A: 255}, 120)
-		sections[i] = func(gtx layout.Context) layout.Dimensions {
+		sections[i] = rx.Of[layout.Widget](func(gtx layout.Context) layout.Dimensions {
 			laid[i]++
 			return inner(gtx)
-		}
+		})
 	}
 	props := shell.Props{
 		Layout:   shell.StackedPage,
@@ -145,6 +147,48 @@ func TestShellStackedPageScrolls(t *testing.T) {
 	}
 }
 
+// TestShellStackedPageSectionReEmission verifies that a section stream
+// re-emitting (the shape of a theme change) re-emits the shell widget
+// itself. This is the property that lets observable-driven apps repaint
+// on section changes without a layer-boundary adapter: the shell
+// emission is what drives the window's Invalidate.
+func TestShellStackedPageSectionReEmission(t *testing.T) {
+	secIn, secObs := rx.Subject[layout.Widget](0, 1, 16)
+	props := shell.Props{
+		Layout:   shell.StackedPage,
+		Sections: []rx.Observable[layout.Widget]{secObs},
+	}
+	sh := shell.Shell(rx.Of(theme.Default()), props)
+
+	var emissions atomic.Int32
+	sub := sh.Subscribe(func(next layout.Widget, err error, done bool) {
+		if !done && next != nil {
+			emissions.Add(1)
+		}
+	}, rx.Goroutine)
+	defer sub.Unsubscribe()
+
+	waitAbove := func(n int32) bool {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if emissions.Load() > n {
+				return true
+			}
+			secIn.Next(band(color.NRGBA{R: 200, A: 255}, 60))
+			time.Sleep(time.Millisecond)
+		}
+		return false
+	}
+	if !waitAbove(0) {
+		t.Fatal("Shell did not emit for the initial section widget")
+	}
+	seen := emissions.Load()
+	if !waitAbove(seen) {
+		t.Fatalf("section re-emission did not re-emit the shell (stuck at %d emissions)", seen)
+	}
+	secIn.Done(nil)
+}
+
 // TestShellStackedPageTabTraversal verifies that Tab focus traverses
 // the shell in op-stream order navbar → sections top to bottom →
 // footer. All stops except the navbar link are externally observable
@@ -175,9 +219,9 @@ func TestShellStackedPageTabTraversal(t *testing.T) {
 			},
 			Shaper: shaper,
 		},
-		Sections: []layout.Widget{
-			clickBand(&s0Click, color.NRGBA{R: 0, G: 200, B: 0, A: 255}, 60),
-			clickBand(&s1Click, color.NRGBA{R: 200, G: 120, B: 0, A: 255}, 60),
+		Sections: []rx.Observable[layout.Widget]{
+			rx.Of[layout.Widget](clickBand(&s0Click, color.NRGBA{R: 0, G: 200, B: 0, A: 255}, 60)),
+			rx.Of[layout.Widget](clickBand(&s1Click, color.NRGBA{R: 200, G: 120, B: 0, A: 255}, 60)),
 		},
 		Footer: clickBand(&footerClick, color.NRGBA{R: 120, G: 0, B: 200, A: 255}, 40),
 	}

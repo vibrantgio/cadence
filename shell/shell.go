@@ -137,11 +137,17 @@ type Props struct {
 	// pinning to the viewport at a fixed height.
 	//
 	// Sections are stacked top to bottom in a scroll region owned by
-	// the shell. Each section spans the full page width and receives
-	// an unbounded height, so it must return its natural height.
-	// Sections own their internal max-width/centering — a full-bleed
-	// background with a centered inner column composes naturally.
-	Sections []layout.Widget
+	// the shell. Each entry is a widget stream, matching the Sidebar
+	// and Aside slots, so sections re-render on theme change without a
+	// layer-boundary adapter; the shell combines them and re-emits
+	// whenever any section emits. Nil entries render empty. Each
+	// section spans the full page width and receives an unbounded
+	// height, so it must return its natural height. Sections own their
+	// internal max-width/centering — a full-bleed background with a
+	// centered inner column composes naturally. The static Render path
+	// takes pre-built section widgets via RenderStackedPage instead
+	// (Props.Sections is not consulted there).
+	Sections []rx.Observable[layout.Widget]
 }
 
 // Layout-affecting constants. The navbar and footer slots have fixed
@@ -184,9 +190,9 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 // is honoured by SplitPane; SidebarHeaderMain uses the supplied sidebarW
 // directly (Props.Sidebar is not consulted). Pass nil sidebarW to render
 // an empty sidebar column. A ThreeColumn Props renders without an aside
-// column — use RenderThreeColumn to supply a pre-built aside widget.
-// StackedPage renders fully from Props (Sections and Footer are plain
-// widgets); sidebarW and splitRatio are ignored for it.
+// column — use RenderThreeColumn to supply a pre-built aside widget; a
+// StackedPage Props renders only the navbar and footer — use
+// RenderStackedPage to supply pre-built section widgets.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -202,7 +208,7 @@ func Render(
 	case ThreeColumn:
 		return RenderThreeColumn(shaper, props, sidebarW, nil, colors, sp, ts, defaultAsideDp)
 	case StackedPage:
-		return staticStackedPage(shaper, props, colors, sp, ts)
+		return RenderStackedPage(shaper, props, nil, colors, sp, ts)
 	default:
 		return staticSidebarHeaderMain(sidebarW, shaper, props, colors, sp, ts)
 	}

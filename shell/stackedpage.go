@@ -21,32 +21,50 @@ func stackedPageObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 	colorObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[tokens.ColorTokens] {
 		return t.Color
 	})
-	inputs := rx.CombineLatest2(colorObs, nb)
+	// Combine the per-section streams into one []layout.Widget stream so
+	// any section emission (typically a theme change) re-emits the shell.
+	sectionObs := make([]rx.Observable[layout.Widget], len(props.Sections))
+	for i, s := range props.Sections {
+		if s == nil {
+			s = rx.Of[layout.Widget](emptyWidget)
+		}
+		sectionObs[i] = s
+	}
+	sections := rx.Of([]layout.Widget(nil))
+	if len(sectionObs) > 0 {
+		sections = rx.CombineLatest(sectionObs...)
+	}
+	inputs := rx.CombineLatest3(colorObs, nb, sections)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
 		// The scroll position is captured once per subscription so it
 		// survives re-emissions for the lifetime of the Shell instance.
 		list := &layout.List{Axis: layout.Vertical}
-		return rx.Map(inputs, func(next rx.Tuple2[tokens.ColorTokens, layout.Widget]) layout.Widget {
-			colors, nbW := next.First, next.Second
-			sections := props.Sections
+		return rx.Map(inputs, func(next rx.Tuple3[tokens.ColorTokens, layout.Widget, []layout.Widget]) layout.Widget {
+			colors, nbW, secW := next.First, next.Second, next.Third
 			footer := props.Footer
 			return func(gtx layout.Context) layout.Dimensions {
-				return drawStackedPage(gtx, nbW, sections, footer, colors, list)
+				return drawStackedPage(gtx, nbW, secW, footer, colors, list)
 			}
 		})
 	})
 }
 
-func staticStackedPage(
+// RenderStackedPage produces a layout.Widget for a StackedPage shell
+// with pre-resolved tokens and no event processing. Intended for
+// golden-image testing and static demonstrations; production code
+// should use Shell. sections are pre-built widgets for the scroll
+// region (Props.Sections is not consulted); Footer is taken from props
+// and appended after the last section.
+func RenderStackedPage(
 	shaper *text.Shaper,
 	props Props,
+	sections []layout.Widget,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
 	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
 	list := &layout.List{Axis: layout.Vertical}
-	sections := props.Sections
 	footer := props.Footer
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawStackedPage(gtx, nbW, sections, footer, colors, list)
@@ -92,10 +110,14 @@ func drawStackedPage(
 		// width; the list gives children an unbounded height.
 		bgtx.Constraints = layout.Exact(image.Pt(size.X, bodyH))
 		list.Layout(bgtx, children, func(gtx layout.Context, i int) layout.Dimensions {
+			w := footer
 			if i < len(sections) {
-				return sections[i](gtx)
+				w = sections[i]
 			}
-			return footer(gtx)
+			if w == nil {
+				return layout.Dimensions{}
+			}
+			return w(gtx)
 		})
 		st.Pop()
 	}
