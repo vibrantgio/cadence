@@ -124,8 +124,8 @@ type resolvedTokens struct {
 }
 
 const (
-	cellWidthDp  = 40
-	cellHeightDp = 44
+	cellWidthDp   = 40
+	cellHeightDp  = 44
 	chevronSizeDp = 16
 )
 

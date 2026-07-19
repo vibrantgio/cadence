@@ -113,18 +113,18 @@ func makeRows(n int) []row {
 
 func idCell(shaper *text.Shaper) func(row) layout.Widget {
 	return func(r row) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale,strconv.Itoa(r.ID))
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.Itoa(r.ID))
 	}
 }
 
 func nameCell(shaper *text.Shaper) func(row) layout.Widget {
 	return func(r row) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale,r.Name)
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, r.Name)
 	}
 }
 
 func valueCell(shaper *text.Shaper) func(row) layout.Widget {
 	return func(r row) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale,strconv.FormatFloat(r.Value, 'f', 2, 64))
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.FormatFloat(r.Value, 'f', 2, 64))
 	}
 }

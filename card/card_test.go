@@ -68,11 +68,11 @@ func TestCardGolden(t *testing.T) {
 	footer := fillRect(color.NRGBA{R: 120, G: 180, B: 120, A: 255}, 20)
 
 	cases := []struct {
-		name    string
-		colors  tokens.ColorTokens
-		props   card.Props
-		bg      color.NRGBA
-		margin  int
+		name   string
+		colors tokens.ColorTokens
+		props  card.Props
+		bg     color.NRGBA
+		margin int
 	}{
 		{
 			name:   "light-normal",

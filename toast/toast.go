@@ -279,8 +279,8 @@ func drawStackStatic(
 }
 
 const (
-	toastWidthDp   = 240
-	toastMinHDp    = 36
+	toastWidthDp = 240
+	toastMinHDp  = 36
 )
 
 // paintStack lays out the column of toasts at the anchored corner of the

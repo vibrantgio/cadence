@@ -83,4 +83,3 @@ func isTop(id int64) bool {
 	defer stackMu.Unlock()
 	return len(stackOpen) > 0 && stackOpen[len(stackOpen)-1] == id
 }
-

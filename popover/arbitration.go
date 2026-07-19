@@ -14,10 +14,10 @@ import (
 type ArbitrationSnapshot struct{ Top int64 }
 
 var (
-	arbMu        sync.Mutex
-	arbTop       int64
-	arbNextID    atomic.Int64
-	arbPublish   rx.Observer[ArbitrationSnapshot]
+	arbMu      sync.Mutex
+	arbTop     int64
+	arbNextID  atomic.Int64
+	arbPublish rx.Observer[ArbitrationSnapshot]
 	// Arbitration is the cross-popover coordination Observable. Only one
 	// popover may be open at a time; opening a new popover takes top and
 	// the previous popover observes the change at frame time and invokes

@@ -218,13 +218,13 @@ func TestTabsArrowAndHomeEndWrapAndFocus(t *testing.T) {
 	pressKey(key.NameEnd)        // → tab 2, Enter on tab 2
 
 	want := []int{
-		0,       // initial click
-		1, 1,    // Right + Enter
-		2, 2,    // Right + Enter
-		0, 0,    // Right (wrap) + Enter
-		2, 2,    // Left (wrap) + Enter
-		0, 0,    // Home + Enter
-		2, 2,    // End + Enter
+		0,    // initial click
+		1, 1, // Right + Enter
+		2, 2, // Right + Enter
+		0, 0, // Right (wrap) + Enter
+		2, 2, // Left (wrap) + Enter
+		0, 0, // Home + Enter
+		2, 2, // End + Enter
 	}
 	if !equalInts(calls, want) {
 		t.Fatalf("OnSelect call sequence:\n got  %v\n want %v", calls, want)

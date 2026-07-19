@@ -80,7 +80,7 @@ func TestRowFnCalledOnlyForVisibleItems(t *testing.T) {
 			Header: "ID",
 			Cell: func(item int) layout.Widget {
 				calls++
-				return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale,strconv.Itoa(item))
+				return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.Itoa(item))
 			},
 		},
 	}
@@ -174,7 +174,7 @@ func TestNilItemsObservableRenders(t *testing.T) {
 
 func cellAs(shaper *text.Shaper) func(int) layout.Widget {
 	return func(v int) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale,strconv.Itoa(v))
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.Itoa(v))
 	}
 }
 
