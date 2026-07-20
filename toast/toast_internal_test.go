@@ -109,14 +109,14 @@ func TestNotifyReachesStackSubscription(t *testing.T) {
 	obs := Stack(rx.Of(theme.Default()), props)
 
 	emissions := make(chan layout.Widget, 4)
-	sub := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	sub := obs.Subscribe(rx.GoroutineContext(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			select {
 			case emissions <- next:
 			default:
 			}
 		}
-	}, rx.Goroutine)
+	})
 	defer sub.Unsubscribe()
 
 	// Drain the initial seed emission (the StartWith-injected ping).

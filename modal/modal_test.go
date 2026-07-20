@@ -1,6 +1,7 @@
 package modal_test
 
 import (
+	"context"
 	"flag"
 	"image"
 	"image/color"
@@ -154,11 +155,11 @@ func liveModal(t *testing.T, props modal.Props) layout.Widget {
 	}
 	obs := modal.Modal(rx.Of(theme.Default()), props)
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("Modal subscribe: %v", err)
 	}
 	if w == nil {
@@ -179,11 +180,11 @@ func liveButtonAction(t *testing.T, label string, clk *widget.Clickable) layout.
 		Shaper:    defaultShaper(t),
 	})
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("button action subscribe: %v", err)
 	}
 	if w == nil {

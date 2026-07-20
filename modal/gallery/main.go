@@ -135,14 +135,14 @@ func run(w *app.Window) error {
 		Shaper:          shaper,
 		OnClose:         func(_ layout.Context) { closeDialog() },
 	})
-	sub := modalObs.Subscribe(func(mw layout.Widget, _ error, done bool) {
+	sub := modalObs.Subscribe(rx.GoroutineContext(), func(mw layout.Widget, _ error, done bool) {
 		if !done && mw != nil {
 			d.mu.Lock()
 			d.modalWidget = mw
 			d.mu.Unlock()
 			w.Invalidate()
 		}
-	}, rx.Goroutine)
+	})
 	defer sub.Unsubscribe()
 
 	// Open the dialog on launch.

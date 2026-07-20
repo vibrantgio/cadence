@@ -1,6 +1,7 @@
 package sidebar_test
 
 import (
+	"context"
 	"flag"
 	"image"
 	"image/color"
@@ -156,11 +157,11 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 func liveWidget(t *testing.T, sb rx.Observable[layout.Widget]) layout.Widget {
 	t.Helper()
 	var w layout.Widget
-	if err := sb.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := sb.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("Sidebar subscribe: %v", err)
 	}
 	if w == nil {

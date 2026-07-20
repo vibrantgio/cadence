@@ -226,11 +226,11 @@ func TestShellStackedPageSectionReEmission(t *testing.T) {
 	sh := shell.Shell(rx.Of(theme.Default()), props)
 
 	var emissions atomic.Int32
-	sub := sh.Subscribe(func(next layout.Widget, err error, done bool) {
+	sub := sh.Subscribe(rx.GoroutineContext(), func(next layout.Widget, err error, done bool) {
 		if !done && next != nil {
 			emissions.Add(1)
 		}
-	}, rx.Goroutine)
+	})
 	defer sub.Unsubscribe()
 
 	waitAbove := func(n int32) bool {

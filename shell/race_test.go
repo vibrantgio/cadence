@@ -32,11 +32,11 @@ import (
 func raceHarness(t *testing.T, sh rx.Observable[layout.Widget], kick func()) (latest func() layout.Widget, stop func()) {
 	t.Helper()
 	var cur atomic.Value
-	sub := sh.Subscribe(func(next layout.Widget, err error, done bool) {
+	sub := sh.Subscribe(rx.GoroutineContext(), func(next layout.Widget, err error, done bool) {
 		if !done && next != nil {
 			cur.Store(next)
 		}
-	}, rx.Goroutine)
+	})
 
 	deadline := time.Now().Add(5 * time.Second)
 	for cur.Load() == nil && time.Now().Before(deadline) {

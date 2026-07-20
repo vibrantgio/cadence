@@ -1,6 +1,7 @@
 package popover_test
 
 import (
+	"context"
 	"flag"
 	"image"
 	"image/color"
@@ -127,11 +128,11 @@ func livePopover(t *testing.T, props popover.Props) layout.Widget {
 	t.Helper()
 	obs := popover.Popover(rx.Of(theme.Default()), props)
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("Popover subscribe: %v", err)
 	}
 	if w == nil {

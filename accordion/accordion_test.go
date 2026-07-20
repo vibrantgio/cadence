@@ -1,6 +1,7 @@
 package accordion_test
 
 import (
+	"context"
 	"flag"
 	"image"
 	"image/color"
@@ -135,11 +136,11 @@ func TestAccordionChevronRotatesBetweenStates(t *testing.T) {
 func liveWidget(t *testing.T, obs rx.Observable[layout.Widget]) layout.Widget {
 	t.Helper()
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("Accordion subscribe: %v", err)
 	}
 	if w == nil {

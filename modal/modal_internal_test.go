@@ -1,6 +1,7 @@
 package modal
 
 import (
+	"context"
 	"image"
 	"testing"
 
@@ -128,11 +129,11 @@ func liveCloseWidget(t *testing.T, st *modalState, shaper *text.Shaper) layout.W
 		Shaper:    shaper,
 	})
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("close button subscribe: %v", err)
 	}
 	if w == nil {
@@ -152,11 +153,11 @@ func liveButton(t *testing.T, shaper *text.Shaper, label string, clk *widget.Cli
 		Shaper:    shaper,
 	})
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("button action subscribe: %v", err)
 	}
 	if w == nil {

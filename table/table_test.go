@@ -1,6 +1,7 @@
 package table_test
 
 import (
+	"context"
 	"image"
 	"strconv"
 	"testing"
@@ -35,11 +36,11 @@ func defaultShaper(t *testing.T) *text.Shaper {
 func liveWidget(t *testing.T, obs rx.Observable[layout.Widget]) layout.Widget {
 	t.Helper()
 	var w layout.Widget
-	if err := obs.Subscribe(func(next layout.Widget, _ error, done bool) {
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
 		if !done && next != nil {
 			w = next
 		}
-	}, rx.NewScheduler()).Wait(); err != nil {
+	}).Wait(); err != nil {
 		t.Fatalf("Table subscribe: %v", err)
 	}
 	if w == nil {
