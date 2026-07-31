@@ -15,10 +15,10 @@ github.com/reactivego/scheduler v0.2.0 h1:XCg1M2L/ejSOI8v5Q0K5xJt+W204+F0AJsjpTP
 github.com/reactivego/scheduler v0.2.0/go.mod h1:Kw99rMXR1WJr/FgeqQfGAWClsWWlVKXZCUwJ+iCXUtQ=
 github.com/vibrantgio/mvu v0.4.2 h1:aLNu62E7GY1k/pOxuwN3uayW37h6uBtcvTpr0YpdF4A=
 github.com/vibrantgio/mvu v0.4.2/go.mod h1:jFP2zPvLge60zDSlCqTOcbMLHJaQgv1b8/VsmFD1ejo=
-github.com/vibrantgio/prism v0.1.1 h1:Fn1r9adW5PybOpJfMnRvjMJnRzpMAp6rISqICLjcens=
-github.com/vibrantgio/prism v0.1.1/go.mod h1:Zo4570DEXYgCeGrW74YpbHR6qVgRVY8VRHZ9PRHKjqE=
-github.com/vibrantgio/pulse v0.0.5 h1:Xtoy0V7kOMQ6eokvG29mha3mRLhI5/HHXrImA6IhMLQ=
-github.com/vibrantgio/pulse v0.0.5/go.mod h1:NjAl7yavYYYAqTmQXdQNDdHmYDlalMnuTvxDYPXhhG4=
+github.com/vibrantgio/prism v0.1.2 h1:jUaWtUhgE7G2ky3WKmEb/eg2Ot2Dz9/byascOfEJEp8=
+github.com/vibrantgio/prism v0.1.2/go.mod h1:MMfYi+6n9ZsfbEl3di+L1u3Dd7A+xHtESDAiczFN7OQ=
+github.com/vibrantgio/pulse v0.0.6 h1:v/IKN9l3UMy0CljAL8mW9nRPgm12U4CGh5WqgRU8bfk=
+github.com/vibrantgio/pulse v0.0.6/go.mod h1:XBagyV9hfJTRomIRVHBrNpn08TlI4pp68eLlHU56KDA=
 golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 h1:ex206bKw+v3K0dm3andkrIF+ijyQKJG1pLgwQ2PYdQM=
 golang.org/x/exp v0.0.0-20260727155853-b88d891fe743/go.mod h1:EdfpwwqSu+0Li0mzskwHU6FWDV3t9Q+RZDo3QMUtL3Q=
 golang.org/x/exp/shiny v0.0.0-20260727155853-b88d891fe743 h1:rQLtGtwpYzQUyxCqrT3i4lGgvC1Q4G72JTHYncg6AvY=
