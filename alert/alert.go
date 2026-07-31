@@ -6,6 +6,21 @@
 // Go function consuming a Prism theme observable, returning a stream of
 // layout.Widget. Source is intentionally short and free of opaque
 // configuration — copy it into your own app and modify as needed.
+//
+// Two things about the variants are worth knowing before you theme them.
+// Only Info and Error read a token role — Primary and Error. Success and
+// Warning have no role in the token set yet, so they fall back to Tailwind
+// green and amber shades defined in this file, chosen between light and
+// dark by comparing the luminance of Surface against OnSurface. A custom
+// theme's colours therefore reach two of the four variants and not the
+// other two. And all four draw the same right-pointing chevron glyph,
+// differing only in colour; the per-variant icon set arrives with
+// prism/icon.
+//
+// The banner fills the constraints it is given rather than shrinking to
+// its content — it reports gtx.Constraints.Max as its size — so an Alert
+// handed a full-height column takes the whole column. Give it a
+// height-constrained slot.
 package alert
 
 import (

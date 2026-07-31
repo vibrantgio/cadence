@@ -7,6 +7,23 @@
 // callable Go function consuming a Prism theme observable, returning a
 // stream of layout.Widget. Source is intentionally short and free of
 // opaque configuration — copy it into your own app and modify as needed.
+//
+// "Centred" is approximate. The link row sits between two equal flexed
+// spacers, so it is centred in the space that Brand and Actions leave
+// over, not in the bar: a wide Brand against narrow Actions pushes the
+// links right of the true centre by half the difference. Match the two
+// slots' widths when that matters.
+//
+// Link.Active and Link.OnClick are independent. Active only selects the
+// Primary underline, and a nil OnClick makes a link non-interactive and
+// drops it out of focus traversal — so an Active link with no OnClick
+// renders underlined and inert, which is usually a bug in the caller.
+//
+// There is no overflow behaviour: every Link renders on one line, and a
+// bar too narrow for its own contents clips rather than wrapping or
+// collapsing to a menu affordance. The bar also fills the height it is
+// given — it reports gtx.Constraints.Max — so it needs a
+// height-constrained slot; cadence/shell pins it to 64 dp for you.
 package navbar
 
 import (

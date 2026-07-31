@@ -1,13 +1,15 @@
 // Command gallery shows the Cadence Modal in action. The header close
-// affordance (GX.4) and the footer Cancel/OK actions (GX.5) are all
-// prism/button instances that own their own focus ring; the modal sequences
-// them into one Tab cycle (× → Cancel → OK → ×) via Props.ActionFocusTags.
+// affordance and the footer Cancel/OK actions are all prism/button
+// instances that own their own focus ring; the modal sequences them into
+// one Tab cycle (× → Cancel → OK → ×) via Props.ActionFocusTags.
 //
 // Exercise it: hover the × for the Primary overlay; press Tab to move the focus
 // ring across the controls; activate any with Enter/Space; press Escape or
 // click the dimmed backdrop to dismiss; click "Open dialog" to bring it back.
 //
-// Run from the repo root: go run ./cadence/modal/gallery
+// Run it from the root of the cadence repository:
+//
+//	go run ./modal/gallery
 package main
 
 import (

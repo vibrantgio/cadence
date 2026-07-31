@@ -18,6 +18,15 @@
 // responsive collapse from `Columns` to a smaller column count on narrow
 // viewports is provided; render at a width that fits `Columns × cell` or
 // adopt a caller-side breakpoint.
+//
+// Feature is alone among the cadence patterns in having no Props.Shaper.
+// The observable path builds its own shaper over gofont.Collection inside
+// Feature and offers no way to hand it the application's, so a Feature
+// grid renders Title and Body in Go fonts however the rest of the
+// application is typeset — with no warning, exactly the failure
+// prism/button documents for a nil Props.Shaper. The static Render path
+// takes an explicit shaper and is unaffected. Adding the field is the
+// fix; it is not there yet.
 package feature
 
 import (

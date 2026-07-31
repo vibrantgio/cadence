@@ -7,6 +7,26 @@
 // callable Go function consuming a Prism theme observable, returning a
 // stream of layout.Widget. Source is intentionally short — copy it into
 // your own app and modify as needed.
+//
+// The column's width is not negotiable: 192 dp expanded and 48 dp
+// collapsed, both fixed constants in this file that ignore the horizontal
+// constraint entirely. Height is whatever it is handed. Collapsed is an
+// rx.Observable[bool] the caller owns — the sidebar renders that state
+// and does not hold it — and OnToggleCollapse is the request to change
+// it, so wiring the affordance to nothing leaves a sidebar that cannot
+// collapse.
+//
+// Items are stacked at a fixed 48 dp pitch with no scroll region: a list
+// longer than the column is tall simply paints past the bottom edge.
+// Wrap the pattern in your own scroll, or copy the file and swap the loop
+// in drawSidebar for a prism/list.
+//
+// Keyboard reach stops at the items. Each Item with a non-nil OnClick
+// takes focus, and Arrow-Up/Down move between them, skipping the ones
+// without; the collapse affordance deliberately registers no focus tag —
+// it answers pointer clicks only — so that Arrow traversal stays bounded
+// by the item list. Its glyph is a placeholder filled square until
+// prism/icon lands.
 package sidebar
 
 import (

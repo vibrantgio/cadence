@@ -6,6 +6,18 @@
 // Go function consuming a Prism theme observable, returning a stream of
 // layout.Widget. The source is intentionally short and free of opaque
 // configuration — copy it into your own app and modify as needed.
+//
+// Card draws no text of its own, which is why Props carries no Shaper
+// where its sibling patterns do: all three slots are caller-supplied
+// layout.Widgets, so the typeface of anything inside a card is settled by
+// whoever builds those widgets. Nil slots are dropped from the stack
+// entirely, and the S3 gaps fall only between the slots that survive — a
+// Body-only card is not padded as though the Header and Footer were there
+// but empty.
+//
+// The card fills the constraints it is given rather than shrinking to its
+// content — it reports gtx.Constraints.Max as its size — so a Card handed
+// a full-height column takes the whole column. Constrain it yourself.
 package card
 
 import (

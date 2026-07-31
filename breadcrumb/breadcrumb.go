@@ -8,6 +8,19 @@
 // callable Go function consuming a Prism theme observable, returning a
 // stream of layout.Widget. Source is intentionally short and free of
 // opaque configuration — copy it into your own app and modify as needed.
+//
+// Colour and interactivity are decided independently and can disagree.
+// The OnSurface "current location" colour goes to the last Item by
+// position, whatever its OnClick; a segment is clickable exactly when its
+// own OnClick is non-nil. The conventional trail — every segment but the
+// last carrying an OnClick — is the caller's to build, and nothing here
+// enforces it, so a clickable final segment still renders as though it
+// were where you already are.
+//
+// There is no overflow behaviour. Every Item renders, in one horizontal
+// row, each label clamped to a single line; a trail deeper than its
+// constraint is clipped rather than collapsed to a leading ellipsis. An
+// empty Items renders to zero Dimensions.
 package breadcrumb
 
 import (
