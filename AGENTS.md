@@ -27,3 +27,17 @@ root.
 **Build and test.** From the repository root:
 
     go build ./... && go test ./...
+
+**Golden images.** Tests in 17 packages compare rendered output against
+PNGs committed under `testdata/golden/`. When a change legitimately moves
+pixels, regenerate them within the same change, look at what came out, and
+say so in the commit. From the repository root:
+
+    go test ./accordion ./alert ./breadcrumb ./card ./feature ./hero ./modal ./navbar ./pagination ./popover ./pricing ./shell ./sidebar ./tabs ./testimonial ./toast ./tooltip -golden.update
+
+Both halves of that line matter. `go test` cannot tell that an unfamiliar
+flag is boolean, so a flag placed before the packages swallows them: `go
+test -golden.update ./...` tests whatever package the repository root
+holds, not `./...`. And `./...` cannot stand in for the list — this module
+has test packages that store no goldens, and a test binary rejects a flag
+it never declared.
