@@ -1,6 +1,6 @@
 # cadence
 
-The pattern layer of [VibrantGio](https://github.com/vibrantgio), a design
+The pattern layer of [Vibrant Gio](https://github.com/vibrantgio), a design
 system for native desktop applications on macOS, Windows and Linux, written in
 pure Go on [Gio](https://gioui.org). Where prism gives you a button, cadence
 gives you the eighteen composed things an application is actually made of — an

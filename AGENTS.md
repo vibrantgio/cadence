@@ -1,6 +1,6 @@
 # AGENTS.md — cadence
 
-The pattern layer of the VibrantGio design system: eighteen composed
+The pattern layer of the Vibrant Gio design system: eighteen composed
 application patterns assembled from prism components and pulse effects —
 shell, navbar, sidebar, table, tabs, pagination, modal, popover, tooltip,
 toast, alert, card, accordion, breadcrumb, hero, feature, pricing and
