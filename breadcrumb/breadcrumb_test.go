@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"gioui.org/font/gofont"
 	"gioui.org/gpu/headless"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -20,7 +19,7 @@ import (
 	"gioui.org/unit"
 
 	"github.com/vibrantgio/cadence/breadcrumb"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
@@ -33,7 +32,7 @@ var canvasSize = image.Pt(canvasW, canvasH)
 
 func defaultShaper(t *testing.T) *text.Shaper {
 	t.Helper()
-	return text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	return tokens.DefaultTypography.Shaper()
 }
 
 // scene renders w into a canvas-sized constraint over a flat background.

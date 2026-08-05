@@ -12,8 +12,8 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/navbar"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 func stackedPageObservable(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {

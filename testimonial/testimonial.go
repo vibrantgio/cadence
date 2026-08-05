@@ -31,7 +31,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -42,8 +41,8 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Variant selects between the two testimonial layouts.
@@ -89,7 +88,12 @@ type Props struct {
 	// Items[0] is rendered; an empty slice collapses to zero dimensions.
 	Items []Item
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts.
+	// Shaper is an explicit per-instance override of the text shaper. Leave
+	// it nil in normal use: the testimonial then shapes its quote and
+	// author text with the theme's shaper (Typography.Shaper()), which is
+	// built once and cached inside the theme's Typography value. Set it
+	// only when this instance must shape with a different shaper than the
+	// theme provides.
 	Shaper *text.Shaper
 }
 
@@ -97,28 +101,45 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	quote   tokens.TextStyle // the BodyLarge role: typeface, weight, size, line height
+	body    tokens.TextStyle // the BodyMedium role (author name, placeholder letter)
+	small   tokens.TextStyle // the BodySmall role (author role)
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Testimonial returns an rx.Observable[layout.Widget] that emits a new
 // widget whenever any consumed theme token changes. The layout is purely
 // presentational — no interaction state is carried across emissions.
 func Testimonial(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
-	shaper := props.Shaper
-	if shaper == nil {
-		shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-	}
-
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies the BodyLarge/BodyMedium/BodySmall text
+	// styles and the theme's cached shaper (ADR-003: the theme owns the
+	// typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					quote:   typ.BodyLarge,
+					body:    typ.BodyMedium,
+					small:   typ.BodySmall,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+		// Props.Shaper is an explicit override; the theme's shaper is the
+		// default.
+		shaper := props.Shaper
+		if shaper == nil {
+			shaper = tok.shaper
+		}
 		return func(gtx layout.Context) layout.Dimensions {
 			return drawTestimonial(gtx, shaper, props, tok)
 		}
@@ -127,7 +148,12 @@ func Testimonial(th rx.Observable[theme.Theme], props Props) rx.Observable[layou
 
 // Render produces a layout.Widget for a testimonial with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Testimonial.
+// production code should use Testimonial, which takes the shaper and the
+// BodyLarge/BodyMedium/BodySmall text styles from the theme's Typography.
+// The TypeScale parameter contributes only the role sizes; the author
+// name and placeholder letter fall back to a SemiBold weight (matching
+// the pre-Typography rendering) and the shaper's default typeface and
+// line height.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -136,7 +162,14 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{
+		color:   colors,
+		spacing: sp,
+		radius:  rad,
+		quote:   tokens.TextStyle{Size: ts.BodyLarge},
+		body:    tokens.TextStyle{Size: ts.BodyMedium},
+		small:   tokens.TextStyle{Size: ts.BodySmall},
+	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawTestimonial(gtx, shaper, props, tok)
 	}
@@ -265,9 +298,9 @@ func appendComma(path *clip.Path, x, y, w, h int) {
 	path.Close()
 }
 
-// quoteBodyWidget renders the quote text in BodyLarge OnSurface. Wrap to
-// up to four lines so longer testimonials remain readable without
-// growing the card unboundedly.
+// quoteBodyWidget renders the quote text in the BodyLarge role in
+// OnSurface. Wrap to up to four lines so longer testimonials remain
+// readable without growing the card unboundedly.
 func quoteBodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if label == "" {
@@ -277,7 +310,11 @@ func quoteBodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layo
 		paint.ColorOp{Color: tok.color.OnSurface}.Add(gtx.Ops)
 		material := mColor.Stop()
 		wl := widget.Label{MaxLines: 4}
-		return wl.Layout(gtx, shaper, font.Font{}, unit.Sp(tok.typ.BodyLarge), label, material)
+		if tok.quote.LineHeight != 0 {
+			wl.LineHeight = unit.Sp(tok.quote.LineHeight)
+			wl.LineHeightScale = 1
+		}
+		return wl.Layout(gtx, shaper, styleFont(tok.quote, font.Normal), unit.Sp(tok.quote.Size), label, material)
 	}
 }
 
@@ -292,8 +329,8 @@ func authorBlockWidget(shaper *text.Shaper, item Item, tok resolvedTokens) layou
 			layout.Rigid(pllayout.HSpacer(tok.spacing.S3)),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return pllayout.Col(gtx,
-					textWidget(shaper, item.AuthorName, tok.color.OnSurface, unit.Sp(tok.typ.BodyMedium), font.Font{Weight: font.SemiBold}),
-					textWidget(shaper, item.AuthorRole, tok.color.OnSurfaceVariant, unit.Sp(tok.typ.BodySmall), font.Font{}),
+					textWidget(shaper, item.AuthorName, tok.color.OnSurface, tok.body, font.SemiBold),
+					textWidget(shaper, item.AuthorRole, tok.color.OnSurfaceVariant, tok.small, font.Normal),
 				)
 			}),
 		)
@@ -344,7 +381,11 @@ func drawPlaceholder(gtx layout.Context, shaper *text.Shaper, name string, size 
 	material := mColor.Stop()
 	mLabel := op.Record(gtx.Ops)
 	wl := widget.Label{MaxLines: 1, Alignment: text.Middle}
-	labelDims := wl.Layout(letterGtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(tok.typ.BodyMedium), letter, material)
+	if tok.body.LineHeight != 0 {
+		wl.LineHeight = unit.Sp(tok.body.LineHeight)
+		wl.LineHeightScale = 1
+	}
+	labelDims := wl.Layout(letterGtx, shaper, styleFont(tok.body, font.SemiBold), unit.Sp(tok.body.Size), letter, material)
 	labelCall := mLabel.Stop()
 
 	off := op.Offset(image.Pt((size-labelDims.Size.X)/2, (size-labelDims.Size.Y)/2)).Push(gtx.Ops)
@@ -352,10 +393,12 @@ func drawPlaceholder(gtx layout.Context, shaper *text.Shaper, name string, size 
 	off.Pop()
 }
 
-// textWidget renders a single-line widget.Label in the supplied colour,
-// size, and font. Empty labels collapse to zero dimensions so adjacent
-// section gaps are the only vertical contribution.
-func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp, f font.Font) layout.Widget {
+// textWidget renders a single-line widget.Label in the supplied colour
+// and text style. Empty labels collapse to zero dimensions so adjacent
+// section gaps are the only vertical contribution. A zero style weight
+// (the legacy Render path synthesizes size-only styles) falls back to
+// fallbackWeight, the pre-Typography hard-coded weight for the site.
+func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle, fallbackWeight font.Weight) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if label == "" {
 			return layout.Dimensions{}
@@ -364,6 +407,20 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp,
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
 		wl := widget.Label{MaxLines: 1}
-		return wl.Layout(gtx, shaper, f, size, label, material)
+		if style.LineHeight != 0 {
+			wl.LineHeight = unit.Sp(style.LineHeight)
+			wl.LineHeightScale = 1
+		}
+		return wl.Layout(gtx, shaper, styleFont(style, fallbackWeight), unit.Sp(style.Size), label, material)
 	}
+}
+
+// styleFont builds the font.Font for style. The style's typeface is
+// honoured; a zero style weight falls back to fallback.
+func styleFont(style tokens.TextStyle, fallback font.Weight) font.Font {
+	f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallback}
+	if style.Weight != 0 {
+		f.Weight = tokens.FontWeight(style.Weight)
+	}
+	return f
 }

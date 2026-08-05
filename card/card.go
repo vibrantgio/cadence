@@ -30,9 +30,9 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
 	"github.com/vibrantgio/pulse/depth"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Props configures a Card. All slot fields are optional; nil slots are

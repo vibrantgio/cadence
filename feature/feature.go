@@ -18,15 +18,6 @@
 // responsive collapse from `Columns` to a smaller column count on narrow
 // viewports is provided; render at a width that fits `Columns × cell` or
 // adopt a caller-side breakpoint.
-//
-// Feature is alone among the cadence patterns in having no Props.Shaper.
-// The observable path builds its own shaper over gofont.Collection inside
-// Feature and offers no way to hand it the application's, so a Feature
-// grid renders Title and Body in Go fonts however the rest of the
-// application is typeset — with no warning, exactly the failure
-// prism/button documents for a nil Props.Shaper. The static Render path
-// takes an explicit shaper and is unaffected. Adding the field is the
-// fix; it is not there yet.
 package feature
 
 import (
@@ -34,7 +25,6 @@ import (
 	"image/color"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/paint"
@@ -44,8 +34,8 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // defaultColumns is the column count used when Props.Columns is zero.
@@ -71,12 +61,21 @@ type Props struct {
 
 	// Items is the ordered list of cells. Length 0 renders an empty grid.
 	Items []Item
+
+	// Shaper is an explicit per-instance override of the text shaper. Leave
+	// it nil in normal use: the grid then shapes its titles and bodies with
+	// the theme's shaper (Typography.Shaper()), which is built once and
+	// cached inside the theme's Typography value. Set it only when this
+	// instance must shape with a different shaper than the theme provides.
+	Shaper *text.Shaper
 }
 
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
-	typ     tokens.TypeScale
+	title   tokens.TextStyle // the TitleMedium role: typeface, weight, size, line height
+	body    tokens.TextStyle // the BodyMedium role
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Feature returns an rx.Observable[layout.Widget] that emits a new widget
@@ -87,18 +86,34 @@ func Feature(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	if props.Columns <= 0 {
 		props.Columns = defaultColumns
 	}
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
 
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies the TitleMedium and BodyMedium text
+	// styles and the theme's cached shaper (ADR-003: the theme owns the
+	// typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Type),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, typ: n.Third}
+			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
+			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+				typ := n.Third
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					title:   typ.TitleMedium,
+					body:    typ.BodyMedium,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+		// Props.Shaper is an explicit override; the theme's shaper is the
+		// default.
+		shaper := props.Shaper
+		if shaper == nil {
+			shaper = tok.shaper
+		}
 		return func(gtx layout.Context) layout.Dimensions {
 			return drawFeature(gtx, shaper, props, tok)
 		}
@@ -107,7 +122,11 @@ func Feature(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 
 // Render produces a layout.Widget for a feature grid with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Feature.
+// production code should use Feature, which takes the shaper and the
+// TitleMedium/BodyMedium text styles from the theme's Typography. The
+// TypeScale parameter contributes only the role sizes; the title falls
+// back to a SemiBold weight (matching the pre-Typography rendering) and
+// the shaper's default typeface and line height.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -118,7 +137,12 @@ func Render(
 	if props.Columns <= 0 {
 		props.Columns = defaultColumns
 	}
-	tok := resolvedTokens{color: colors, spacing: sp, typ: ts}
+	tok := resolvedTokens{
+		color:   colors,
+		spacing: sp,
+		title:   tokens.TextStyle{Size: ts.TitleMedium},
+		body:    tokens.TextStyle{Size: ts.BodyMedium},
+	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawFeature(gtx, shaper, props, tok)
 	}
@@ -216,17 +240,23 @@ func iconCellWidget(icon layout.Widget, tok resolvedTokens) layout.Widget {
 	}
 }
 
-// titleWidget renders the title in TitleMedium SemiBold OnSurface.
+// titleWidget renders the title in the TitleMedium role in OnSurface. A
+// zero style weight (the legacy Render path synthesizes a size-only
+// style) falls back to SemiBold, matching the pre-Typography rendering.
 func titleWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurface, unit.Sp(tok.typ.TitleMedium), font.Font{Weight: font.SemiBold})
+	return textWidget(shaper, label, tok.color.OnSurface, tok.title, font.SemiBold)
 }
 
-// bodyWidget renders the body in BodyMedium OnSurfaceVariant.
+// bodyWidget renders the body in the BodyMedium role in OnSurfaceVariant.
 func bodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurfaceVariant, unit.Sp(tok.typ.BodyMedium), font.Font{})
+	return textWidget(shaper, label, tok.color.OnSurfaceVariant, tok.body, font.Normal)
 }
 
-func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp, f font.Font) layout.Widget {
+// textWidget renders a wrapped widget.Label in the supplied colour and
+// text style. The style's typeface, weight, size and line height are
+// honoured; a zero style weight falls back to fallbackWeight and a zero
+// line height stays at the shaper's default.
+func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle, fallbackWeight font.Weight) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if label == "" {
 			return layout.Dimensions{}
@@ -234,8 +264,16 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp,
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
+		f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallbackWeight}
+		if style.Weight != 0 {
+			f.Weight = tokens.FontWeight(style.Weight)
+		}
 		wl := widget.Label{MaxLines: 3}
-		return wl.Layout(gtx, shaper, f, size, label, material)
+		if style.LineHeight != 0 {
+			wl.LineHeight = unit.Sp(style.LineHeight)
+			wl.LineHeightScale = 1
+		}
+		return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), label, material)
 	}
 }
 

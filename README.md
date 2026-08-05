@@ -30,6 +30,12 @@ Every package has the same two entry points, and the split is deliberate:
   `RenderThreeColumn` and `RenderStackedPage` for the layouts whose slots are
   streams in the live form.
 
+Typography is theme-owned: in the live form every pattern that draws text
+shapes with the theme's `Typography.Shaper()` and the Material Design 3 text
+styles it carries, so leaving `Props.Shaper` nil is the normal case.
+`Props.Shaper` is an explicit per-instance override for the rare pattern
+instance that must shape with a different shaper than the theme provides.
+
 The source of each pattern is short and free of opaque configuration on
 purpose. When a pattern is nearly what you want, copying its file into your
 application and editing it is a supported outcome, not a defeat — several are a
@@ -215,21 +221,6 @@ replaced by `./...`.
 
 Honest about what does not work yet:
 
-- **`feature` cannot be given a typeface.** Every other pattern that draws text
-  takes a `Props.Shaper` and falls back to Go fonts only when it is nil.
-  `feature.Feature` has no `Shaper` field at all and hard-codes
-  `text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))`,
-  so a feature grid renders in Go fonts whatever the application passes
-  everywhere else on the page. `feature.Render` does take a shaper, so the
-  static path is unaffected. Phase C moves the typeface into the theme token
-  and removes every fallback; until then, use `feature.Render` if the typeface
-  matters.
-- **The Go-fonts fallback is silent everywhere else too.** A nil `Props.Shaper`
-  is not an error and produces no warning — the application renders, in the
-  wrong typeface. Pass
-  `text.NewShaper(text.WithCollection(style.FontFaces()))` to every pattern.
-  (`card` and `popover` take no shaper because they draw no text themselves;
-  their slots are caller-supplied widgets.)
 - **`table` has no per-header widget slot.** Headers are drawn internally from
   `Column.Header` strings, so anything else on a header — a tooltip, a filter
   affordance — has to be positioned by arithmetic over the column widths from

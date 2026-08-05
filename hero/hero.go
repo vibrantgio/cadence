@@ -23,7 +23,6 @@ import (
 	"image/color"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -37,8 +36,8 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/button"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // minButtonHeight mirrors prism/button's 44 dp minimum interactive target so
@@ -80,17 +79,24 @@ type Props struct {
 	// into two equal columns with text leading and the visual trailing.
 	Visual layout.Widget
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The default
-	// shaper is created once per subscription inside the rx.Defer scope, so
-	// it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper. Leave
+	// it nil in normal use: the hero then shapes its eyebrow, title,
+	// subtitle and CTA labels with the theme's shaper (Typography.Shaper()),
+	// which is built once and cached inside the theme's Typography value.
+	// Set it only when this instance must shape with a different shaper
+	// than the theme provides.
 	Shaper *text.Shaper
 }
 
 type resolvedTokens struct {
-	color   tokens.ColorTokens
-	spacing tokens.SpacingScale
-	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	color    tokens.ColorTokens
+	spacing  tokens.SpacingScale
+	radius   tokens.RadiusScale
+	eyebrow  tokens.TextStyle // the LabelSmall role: typeface, weight, size, line height
+	title    tokens.TextStyle // the DisplaySmall role
+	subtitle tokens.TextStyle // the BodyLarge role
+	label    tokens.TextStyle // the LabelLarge role (CTA labels)
+	shaper   *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Hero returns an rx.Observable[layout.Widget] that emits a new widget
@@ -98,23 +104,39 @@ type resolvedTokens struct {
 // across emissions: the widget.Clickable for each CTA is allocated once
 // per subscription inside the rx.Defer scope.
 func Hero(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies the LabelSmall/DisplaySmall/BodyLarge/
+	// LabelLarge text styles and the theme's cached shaper (ADR-003: the
+	// theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:    n.First,
+					spacing:  n.Second,
+					radius:   n.Third,
+					eyebrow:  typ.LabelSmall,
+					title:    typ.DisplaySmall,
+					subtitle: typ.BodyLarge,
+					label:    typ.LabelLarge,
+					shaper:   typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		var primaryClick, secondaryClick widget.Clickable
 
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				if props.PrimaryCTA != nil && props.PrimaryCTA.OnClick != nil && primaryClick.Clicked(gtx) {
 					props.PrimaryCTA.OnClick(gtx)
@@ -130,8 +152,12 @@ func Hero(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 
 // Render produces a layout.Widget for a hero with pre-resolved tokens.
 // Intended for golden-image testing and static demonstrations; production
-// code should use Hero. No event work is performed: the CTAs render as
-// inert visuals.
+// code should use Hero, which takes the shaper and the LabelSmall/
+// DisplaySmall/BodyLarge/LabelLarge text styles from the theme's
+// Typography. The TypeScale parameter contributes only the role sizes;
+// the eyebrow and title fall back to a SemiBold weight (matching the
+// pre-Typography rendering) and the shaper's default typeface and line
+// height. No event work is performed: the CTAs render as inert visuals.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -140,7 +166,15 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{
+		color:    colors,
+		spacing:  sp,
+		radius:   rad,
+		eyebrow:  tokens.TextStyle{Size: ts.LabelSmall},
+		title:    tokens.TextStyle{Size: ts.DisplaySmall},
+		subtitle: tokens.TextStyle{Size: ts.BodyLarge},
+		label:    tokens.TextStyle{Size: ts.LabelLarge},
+	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawHero(gtx, shaper, props, tok, nil, nil)
 	}
@@ -214,8 +248,8 @@ func eyebrowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout
 		labelGtx := gtx
 		labelGtx.Constraints.Min = image.Point{}
 		mLabel := op.Record(gtx.Ops)
-		wl := widget.Label{MaxLines: 1}
-		labelDims := wl.Layout(labelGtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(tok.typ.LabelSmall), label, material)
+		wl := styleLabel(1, tok.eyebrow)
+		labelDims := wl.Layout(labelGtx, shaper, styleFont(tok.eyebrow, font.SemiBold), unit.Sp(tok.eyebrow.Size), label, material)
 		labelCall := mLabel.Stop()
 
 		w := labelDims.Size.X + 2*padH
@@ -236,17 +270,19 @@ func eyebrowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout
 	}
 }
 
-// titleWidget renders the display-typography title in OnSurface.
+// titleWidget renders the DisplaySmall-role title in OnSurface. A zero
+// style weight (the legacy Render path synthesizes size-only styles)
+// falls back to SemiBold, matching the pre-Typography rendering.
 func titleWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurface, unit.Sp(tok.typ.DisplaySmall), font.Font{Weight: font.SemiBold})
+	return textWidget(shaper, label, tok.color.OnSurface, tok.title, font.SemiBold)
 }
 
-// subtitleWidget renders the body-large subtitle in OnSurfaceVariant.
+// subtitleWidget renders the BodyLarge-role subtitle in OnSurfaceVariant.
 func subtitleWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurfaceVariant, unit.Sp(tok.typ.BodyLarge), font.Font{})
+	return textWidget(shaper, label, tok.color.OnSurfaceVariant, tok.subtitle, font.Normal)
 }
 
-func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp, f font.Font) layout.Widget {
+func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle, fallbackWeight font.Weight) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if label == "" {
 			return layout.Dimensions{}
@@ -254,9 +290,38 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp,
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
-		wl := widget.Label{MaxLines: 2}
-		return wl.Layout(gtx, shaper, f, size, label, material)
+		wl := styleLabel(2, style)
+		return wl.Layout(gtx, shaper, styleFont(style, fallbackWeight), unit.Sp(style.Size), label, material)
 	}
+}
+
+// styleFont builds the font.Font for style. The style's typeface is
+// honoured; a zero style weight falls back to fallback, the
+// pre-Typography hard-coded weight for the draw site.
+func styleFont(style tokens.TextStyle, fallback font.Weight) font.Font {
+	f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallback}
+	if style.Weight != 0 {
+		f.Weight = tokens.FontWeight(style.Weight)
+	}
+	return f
+}
+
+// styleLabel builds a widget.Label honouring the style's line height; a
+// zero line height stays at the shaper's default.
+func styleLabel(maxLines int, style tokens.TextStyle) widget.Label {
+	wl := widget.Label{MaxLines: maxLines}
+	if style.LineHeight != 0 {
+		wl.LineHeight = unit.Sp(style.LineHeight)
+		wl.LineHeightScale = 1
+	}
+	return wl
+}
+
+// ctaTypeScale synthesizes the size-only TypeScale consumed by
+// prism/button's legacy Render signature: it reads only the LabelLarge
+// size, exactly what the snapshot's LabelLarge role carries.
+func ctaTypeScale(tok resolvedTokens) tokens.TypeScale {
+	return tokens.TypeScale{LabelLarge: tok.label.Size}
 }
 
 // ctaRowWidget lays out the optional Primary/Secondary CTAs in a horizontal
@@ -289,7 +354,7 @@ func ctaRowWidget(
 // wrapped in widget.Clickable when a click target is provided. Sizing is
 // intrinsic — the button shrinks to its label rather than filling the row.
 func primaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, click *widget.Clickable) layout.Widget {
-	rendered := button.Render(shaper, label, tok.color, tok.spacing, tok.radius, tok.typ, button.RenderState{})
+	rendered := button.Render(shaper, label, tok.color, tok.spacing, tok.radius, ctaTypeScale(tok), button.RenderState{})
 	return func(gtx layout.Context) layout.Dimensions {
 		cgtx := ctaGtx(gtx)
 		if click == nil {
@@ -344,8 +409,8 @@ func drawOutlinedButton(gtx layout.Context, shaper *text.Shaper, label string, t
 		labelGtx.Constraints.Max.X = maxLabelW
 	}
 	mLabel := op.Record(gtx.Ops)
-	wl := widget.Label{MaxLines: 1}
-	labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(tok.typ.LabelLarge), label, material)
+	wl := styleLabel(1, tok.label)
+	labelDims := wl.Layout(labelGtx, shaper, styleFont(tok.label, font.Normal), unit.Sp(tok.label.Size), label, material)
 	labelCall := mLabel.Stop()
 
 	w := labelDims.Size.X + 2*padH

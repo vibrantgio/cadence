@@ -28,7 +28,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -42,8 +41,8 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/button"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // CTA describes a per-tier call-to-action. Label populates the button
@@ -82,9 +81,12 @@ type Props struct {
 	// row; length 1 renders a single full-width card.
 	Tiers []Tier
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
-	// default shaper is created once per subscription inside the rx.Defer
-	// scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the pricing row then shapes its tier
+	// text with the theme's shaper (Typography.Shaper()), which is built
+	// once and cached inside the theme's Typography value. Set it only
+	// when this instance must shape with a different shaper than the
+	// theme provides.
 	Shaper *text.Shaper
 }
 
@@ -92,7 +94,12 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	chip    tokens.TextStyle // the LabelSmall role: typeface, weight, size, line height
+	name    tokens.TextStyle // the TitleLarge role (tier name)
+	price   tokens.TextStyle // the DisplaySmall role (price)
+	body    tokens.TextStyle // the BodyMedium role (cadence suffix, features)
+	label   tokens.TextStyle // the LabelLarge role (CTA label)
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Pricing returns an rx.Observable[layout.Widget] that emits a new
@@ -100,23 +107,40 @@ type resolvedTokens struct {
 // survives across emissions: one widget.Clickable per tier is allocated
 // once per subscription inside the rx.Defer scope.
 func Pricing(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies the LabelSmall/TitleLarge/DisplaySmall/
+	// BodyMedium/LabelLarge text styles and the theme's cached shaper
+	// (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					chip:    typ.LabelSmall,
+					name:    typ.TitleLarge,
+					price:   typ.DisplaySmall,
+					body:    typ.BodyMedium,
+					label:   typ.LabelLarge,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		clicks := make([]widget.Clickable, len(props.Tiers))
 
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				for i := range props.Tiers {
 					tier := &props.Tiers[i]
@@ -132,7 +156,12 @@ func Pricing(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 
 // Render produces a layout.Widget for a pricing row with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Pricing. No event work is performed: the
+// production code should use Pricing, which takes the shaper and the
+// LabelSmall/TitleLarge/DisplaySmall/BodyMedium/LabelLarge text styles
+// from the theme's Typography. The TypeScale parameter contributes only
+// the role sizes; the chip, tier name and price fall back to a SemiBold
+// weight (matching the pre-Typography rendering) and the shaper's
+// default typeface and line height. No event work is performed: the
 // CTAs render as inert visuals.
 func Render(
 	shaper *text.Shaper,
@@ -142,7 +171,16 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{
+		color:   colors,
+		spacing: sp,
+		radius:  rad,
+		chip:    tokens.TextStyle{Size: ts.LabelSmall},
+		name:    tokens.TextStyle{Size: ts.TitleLarge},
+		price:   tokens.TextStyle{Size: ts.DisplaySmall},
+		body:    tokens.TextStyle{Size: ts.BodyMedium},
+		label:   tokens.TextStyle{Size: ts.LabelLarge},
+	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawPricing(gtx, shaper, props, tok, nil)
 	}
@@ -270,8 +308,8 @@ func popularChipWidget(shaper *text.Shaper, tok resolvedTokens) layout.Widget {
 		labelGtx := gtx
 		labelGtx.Constraints.Min = image.Point{}
 		mLabel := op.Record(gtx.Ops)
-		wl := widget.Label{MaxLines: 1}
-		labelDims := wl.Layout(labelGtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(tok.typ.LabelSmall), label, material)
+		wl := styleLabel(1, tok.chip)
+		labelDims := wl.Layout(labelGtx, shaper, styleFont(tok.chip, font.SemiBold), unit.Sp(tok.chip.Size), label, material)
 		labelCall := mLabel.Stop()
 
 		w := labelDims.Size.X + 2*padH
@@ -291,9 +329,12 @@ func popularChipWidget(shaper *text.Shaper, tok resolvedTokens) layout.Widget {
 	}
 }
 
-// tierNameWidget renders the tier name in TitleLarge SemiBold OnSurface.
+// tierNameWidget renders the tier name in the TitleLarge role in
+// OnSurface. A zero style weight (the legacy Render path synthesizes
+// size-only styles) falls back to SemiBold, matching the pre-Typography
+// rendering.
 func tierNameWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurface, unit.Sp(tok.typ.TitleLarge), font.Font{Weight: font.SemiBold})
+	return textWidget(shaper, label, tok.color.OnSurface, tok.name, font.SemiBold)
 }
 
 // priceRowWidget renders the price (DisplaySmall OnSurface) followed by
@@ -302,8 +343,8 @@ func tierNameWidget(shaper *text.Shaper, label string, tok resolvedTokens) layou
 // alignment for the prominent price next to its smaller cadence suffix.
 func priceRowWidget(shaper *text.Shaper, price, cadence string, tok resolvedTokens) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		priceW := textWidget(shaper, price, tok.color.OnSurface, unit.Sp(tok.typ.DisplaySmall), font.Font{Weight: font.SemiBold})
-		cadenceW := textWidget(shaper, cadence, tok.color.OnSurfaceVariant, unit.Sp(tok.typ.BodyMedium), font.Font{})
+		priceW := textWidget(shaper, price, tok.color.OnSurface, tok.price, font.SemiBold)
+		cadenceW := textWidget(shaper, cadence, tok.color.OnSurfaceVariant, tok.body, font.Normal)
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 			layout.Rigid(priceW),
 			layout.Rigid(pllayout.HSpacer(tok.spacing.S1)),
@@ -320,7 +361,7 @@ func featureRowWidget(shaper *text.Shaper, label string, tok resolvedTokens) lay
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(checkmarkWidget(tok)),
 			layout.Rigid(pllayout.HSpacer(tok.spacing.S2)),
-			layout.Rigid(textWidget(shaper, label, tok.color.OnSurface, unit.Sp(tok.typ.BodyMedium), font.Font{})),
+			layout.Rigid(textWidget(shaper, label, tok.color.OnSurface, tok.body, font.Normal)),
 		)
 	}
 }
@@ -352,7 +393,7 @@ func checkmarkWidget(tok resolvedTokens) layout.Widget {
 // button fills the card's inner width (prism/button's intrinsic
 // "fill Max.X" sizing), giving the typical full-width pricing CTA.
 func ctaWidget(shaper *text.Shaper, cta *CTA, tok resolvedTokens, click *widget.Clickable) layout.Widget {
-	rendered := button.Render(shaper, cta.Label, tok.color, tok.spacing, tok.radius, tok.typ, button.RenderState{})
+	rendered := button.Render(shaper, cta.Label, tok.color, tok.spacing, tok.radius, ctaTypeScale(tok), button.RenderState{})
 	return func(gtx layout.Context) layout.Dimensions {
 		if click == nil {
 			return rendered(gtx)
@@ -366,10 +407,12 @@ func ctaWidget(shaper *text.Shaper, cta *CTA, tok resolvedTokens, click *widget.
 	}
 }
 
-// textWidget renders a single-line widget.Label in the supplied colour,
-// size, and font. Empty labels collapse to zero dimensions so adjacent
-// section gaps are the only vertical contribution.
-func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp, f font.Font) layout.Widget {
+// textWidget renders a single-line widget.Label in the supplied colour
+// and text style. Empty labels collapse to zero dimensions so adjacent
+// section gaps are the only vertical contribution. A zero style weight
+// (the legacy Render path synthesizes size-only styles) falls back to
+// fallbackWeight, the pre-Typography hard-coded weight for the site.
+func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle, fallbackWeight font.Weight) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if label == "" {
 			return layout.Dimensions{}
@@ -377,7 +420,36 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, size unit.Sp,
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
-		wl := widget.Label{MaxLines: 1}
-		return wl.Layout(gtx, shaper, f, size, label, material)
+		wl := styleLabel(1, style)
+		return wl.Layout(gtx, shaper, styleFont(style, fallbackWeight), unit.Sp(style.Size), label, material)
 	}
+}
+
+// styleFont builds the font.Font for style. The style's typeface is
+// honoured; a zero style weight falls back to fallback, the
+// pre-Typography hard-coded weight for the draw site.
+func styleFont(style tokens.TextStyle, fallback font.Weight) font.Font {
+	f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallback}
+	if style.Weight != 0 {
+		f.Weight = tokens.FontWeight(style.Weight)
+	}
+	return f
+}
+
+// styleLabel builds a widget.Label honouring the style's line height; a
+// zero line height stays at the shaper's default.
+func styleLabel(maxLines int, style tokens.TextStyle) widget.Label {
+	wl := widget.Label{MaxLines: maxLines}
+	if style.LineHeight != 0 {
+		wl.LineHeight = unit.Sp(style.LineHeight)
+		wl.LineHeightScale = 1
+	}
+	return wl
+}
+
+// ctaTypeScale synthesizes the size-only TypeScale consumed by
+// prism/button's legacy Render signature: it reads only the LabelLarge
+// size, exactly what the snapshot's LabelLarge role carries.
+func ctaTypeScale(tok resolvedTokens) tokens.TypeScale {
+	return tokens.TypeScale{LabelLarge: tok.label.Size}
 }

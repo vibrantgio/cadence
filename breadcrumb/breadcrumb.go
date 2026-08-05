@@ -29,7 +29,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -42,8 +41,8 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Item is one segment in the breadcrumb trail. OnClick may be nil, in which
@@ -60,9 +59,11 @@ type Item struct {
 type Props struct {
 	Items []Item
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The default
-	// shaper is created once per subscription inside the rx.Defer scope, so
-	// it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper. Leave
+	// it nil in normal use: the breadcrumb then shapes its labels with the
+	// theme's shaper (Typography.Shaper()), which is built once and cached
+	// inside the theme's Typography value. Set it only when this instance
+	// must shape with a different shaper than the theme provides.
 	Shaper *text.Shaper
 }
 
@@ -71,30 +72,41 @@ type Props struct {
 // for any item whose OnClick is non-nil; mirror the prism/button
 // interaction model (widget.Clickable + semantic ops) per segment.
 func Breadcrumb(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the TitleSmall text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Type),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, typ: n.Third}
+			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
+			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+				typ := n.Third
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					label:   typ.TitleSmall,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		clicks := make([]widget.Clickable, len(props.Items))
 
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				for i := range props.Items {
 					if props.Items[i].OnClick != nil && clicks[i].Clicked(gtx) {
 						props.Items[i].OnClick(gtx)
 					}
 				}
-				return drawBreadcrumb(gtx, shaper, props.Items, clicks, tok.color, tok.spacing, tok.typ)
+				return drawBreadcrumb(gtx, shaper, props.Items, clicks, tok.color, tok.spacing, tok.label)
 			}
 		})
 	})
@@ -102,7 +114,10 @@ func Breadcrumb(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 
 // Render produces a layout.Widget for a breadcrumb with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Breadcrumb.
+// production code should use Breadcrumb, which takes the shaper and the
+// TitleSmall text style from the theme's Typography. The TypeScale
+// parameter contributes only the TitleSmall size; typeface, weight and
+// line height stay at the shaper's defaults.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -111,14 +126,15 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawBreadcrumb(gtx, shaper, props.Items, nil, colors, sp, ts)
+		return drawBreadcrumb(gtx, shaper, props.Items, nil, colors, sp, tokens.TextStyle{Size: ts.TitleSmall})
 	}
 }
 
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
-	typ     tokens.TypeScale
+	label   tokens.TextStyle // the TitleSmall role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 const chevronDp = 12
@@ -130,7 +146,7 @@ func drawBreadcrumb(
 	clicks []widget.Clickable,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	style tokens.TextStyle,
 ) layout.Dimensions {
 	if len(items) == 0 {
 		return layout.Dimensions{}
@@ -146,7 +162,7 @@ func drawBreadcrumb(
 				layout.Rigid(pllayout.HSpacer(sp.S2)),
 			)
 		}
-		children = append(children, layout.Rigid(segmentWidget(shaper, item, clickFor(clicks, i), fg, ts)))
+		children = append(children, layout.Rigid(segmentWidget(shaper, item, clickFor(clicks, i), fg, style)))
 	}
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 }
@@ -168,8 +184,8 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 	return &clicks[i]
 }
 
-func segmentWidget(shaper *text.Shaper, item Item, click *widget.Clickable, fg color.NRGBA, ts tokens.TypeScale) layout.Widget {
-	label := labelWidget(shaper, item.Label, fg, ts)
+func segmentWidget(shaper *text.Shaper, item Item, click *widget.Clickable, fg color.NRGBA, style tokens.TextStyle) layout.Widget {
+	label := labelWidget(shaper, item.Label, fg, style)
 	if click == nil || item.OnClick == nil {
 		return label
 	}
@@ -183,13 +199,24 @@ func segmentWidget(shaper *text.Shaper, item Item, click *widget.Clickable, fg c
 	}
 }
 
-func labelWidget(shaper *text.Shaper, label string, fg color.NRGBA, ts tokens.TypeScale) layout.Widget {
+func labelWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
+		// Shape with the TitleSmall role's typeface, weight, size and line
+		// height. Zero fields (the legacy Render path synthesizes a
+		// size-only style) fall back to the shaper's defaults.
+		f := font.Font{Typeface: font.Typeface(style.Typeface)}
+		if style.Weight != 0 {
+			f.Weight = tokens.FontWeight(style.Weight)
+		}
 		wl := widget.Label{MaxLines: 1}
-		return wl.Layout(gtx, shaper, font.Font{}, unit.Sp(ts.TitleSmall), label, material)
+		if style.LineHeight != 0 {
+			wl.LineHeight = unit.Sp(style.LineHeight)
+			wl.LineHeightScale = 1
+		}
+		return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), label, material)
 	}
 }
 

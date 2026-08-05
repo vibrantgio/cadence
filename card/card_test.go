@@ -18,7 +18,7 @@ import (
 	"gioui.org/unit"
 
 	"github.com/vibrantgio/cadence/card"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
