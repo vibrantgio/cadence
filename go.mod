@@ -5,9 +5,9 @@ go 1.25.1
 require (
 	gioui.org v0.10.1
 	github.com/reactivego/rx v0.3.0
-	github.com/vibrantgio/prism v0.1.6
-	github.com/vibrantgio/pulse v0.0.9
-	github.com/vibrantgio/spectrum v0.0.12
+	github.com/vibrantgio/prism v0.1.7
+	github.com/vibrantgio/pulse v0.0.10
+	github.com/vibrantgio/spectrum v0.0.13
 )
 
 require (
