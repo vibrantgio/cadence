@@ -1,6 +1,16 @@
-// Package card provides the Cadence Card pattern: a rounded Surface
+// Package card provides the Cadence Card pattern: a rounded surface
 // container with optional Header / Body / Footer slots, in either an
-// outlined (flat) or elevated (shadowed) variant.
+// outlined or elevated variant.
+//
+// Elevation (goal G-E2): a card is raised in place, not floating, so
+// both variants read as raised by tonal surface step alone (ADR-007) —
+// no cast shadow. The default outlined card sits on the standing
+// content plane at SurfaceAt(Level1) (Neutral step 200) with a 1 dp
+// Neutral step-500 stroke, ADR-007's strong border; the Elevated
+// variant fills one storey deeper at SurfaceAt(Level2) (Neutral step
+// 300). E2.2's verdict retired the Elevated variant's pulse/depth
+// shadow: shadows are reserved for surfaces that float and can leave
+// (toasts, menus), which a card is not.
 //
 // The package follows the Phase 4 Composition contract: Card is a callable
 // Go function consuming a Prism theme observable, returning a stream of
@@ -30,15 +40,15 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/pulse/depth"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Props configures a Card. All slot fields are optional; nil slots are
 // simply omitted from the inner stack. Elevated swaps the outlined
-// variant (1 dp neutral step-500 stroke, ADR-007's strong border) for a
-// shadowed variant rendered via pulse/depth at ElevationLevel2.
+// variant (a level-1 fill with a 1 dp neutral step-500 stroke, ADR-007's
+// strong border) for a level-2 tonal fill (SurfaceAt(Level2)) with no
+// stroke and no shadow — a card is raised in place, per E2.2's verdict.
 type Props struct {
 	Header layout.Widget
 	Body   layout.Widget
@@ -56,9 +66,9 @@ type Props struct {
 func Card(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Radius),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Elevation),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.ElevationScale]) resolvedTokens {
+				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, elevation: n.Fourth}
 			},
 		)
 	})
@@ -80,6 +90,10 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
+	// elevation is snapshotted so a theme elevation change re-emits the
+	// widget; the fills themselves resolve through SurfaceAt, which reads
+	// the default tokens.Elevation scale.
+	elevation tokens.ElevationScale
 }
 
 func drawCard(gtx layout.Context, props Props, colors tokens.ColorTokens, sp tokens.SpacingScale, rad tokens.RadiusScale) layout.Dimensions {
@@ -88,12 +102,15 @@ func drawCard(gtx layout.Context, props Props, colors tokens.ColorTokens, sp tok
 	r := gtx.Dp(unit.Dp(rad.Lg))
 	gap := gtx.Dp(unit.Dp(sp.S3))
 
+	// The card is raised by tonal step alone: level 1 for the default
+	// outlined variant, level 2 for Elevated (no shadow — E2.2's verdict).
+	fill := colors.SurfaceAt(tokens.Level1)
 	if props.Elevated {
-		depth.Shadow(gtx, bounds, tokens.Level2)
+		fill = colors.SurfaceAt(tokens.Level2)
 	}
 
 	rrect := clip.RRect{Rect: bounds, SE: r, SW: r, NE: r, NW: r}
-	paint.FillShape(gtx.Ops, colors.Surface, rrect.Op(gtx.Ops))
+	paint.FillShape(gtx.Ops, fill, rrect.Op(gtx.Ops))
 
 	if !props.Elevated {
 		paint.FillShape(gtx.Ops, colors.Ramps.Neutral.Step(500), clip.Stroke{

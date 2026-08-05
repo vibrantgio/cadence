@@ -14,6 +14,14 @@
 // receives every Toast. Per-stack routing (channels, topics) is out of
 // scope for this package; callers that want it can wrap Notify and
 // Stack in their own filter.
+//
+// Elevation (goal G-E2): each toast's base fills at SurfaceAt(Level2)
+// (Neutral step 300), tinted 20% with the level accent and ringed by a
+// 1 dp accent outline. Level 2, not the level 3 the shadowless overlays
+// (popover, dropdown menu) take, because the toast does not separate by
+// fill alone: it floats and can leave, so per E2.2's verdict it keeps
+// its Level3 cast shadow — on dark themes the shadow, not the fill, is
+// what separates it — and the accent tint and outline carry the rest.
 package toast
 
 import (
@@ -117,6 +125,10 @@ type resolvedTokens struct {
 	radius  tokens.RadiusScale
 	style   tokens.TextStyle // the LabelMedium role: typeface, weight, size, line height
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
+	// elevation is snapshotted so a theme elevation change re-emits the
+	// widget; the base fill resolves through SurfaceAt, which reads the
+	// default tokens.Elevation scale.
+	elevation tokens.ElevationScale
 }
 
 // Stack returns an rx.Observable[layout.Widget] that renders a positioned
@@ -133,15 +145,16 @@ func Stack(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Elevation),
+			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.ElevationScale]) resolvedTokens {
 				typ := n.Fourth
 				return resolvedTokens{
-					color:   n.First,
-					spacing: n.Second,
-					radius:  n.Third,
-					style:   typ.LabelMedium,
-					shaper:  typ.Shaper(),
+					color:     n.First,
+					spacing:   n.Second,
+					radius:    n.Third,
+					style:     typ.LabelMedium,
+					shaper:    typ.Shaper(),
+					elevation: n.Fifth,
 				}
 			},
 		)
@@ -395,13 +408,14 @@ func paintStack(
 }
 
 // paintToast paints one elevated, tinted row sized to its content: a
-// Level3 cast shadow under a neutral step-300 fill tinted 20% with the
-// level accent, ringed by a 1dp accent outline. The step-300 base sits
-// one step past the Surface ground so the fill itself separates from
-// Surface-painted panes; the Surface-based 12% tint it replaced sat at
-// ~1.2:1 against them — the toast only read as a shape because of its
-// outline. The fade alpha is applied to the shadow (via PushOpacity),
-// the fill, and the text colour.
+// Level3 cast shadow under a level-2 fill (SurfaceAt(Level2), Neutral
+// step 300) tinted 20% with the level accent, ringed by a 1dp accent
+// outline. The level-2 base sits one storey past the level-1 Surface
+// ground so the fill itself separates from Surface-painted panes; the
+// Surface-based 12% tint it replaced sat at ~1.2:1 against them — the
+// toast only read as a shape because of its outline. The fade alpha is
+// applied to the shadow (via PushOpacity), the fill, and the text
+// colour.
 func paintToast(
 	gtx layout.Context,
 	shaper *text.Shaper,
@@ -416,7 +430,7 @@ func paintToast(
 	alpha := fadeAlpha(it, lifetime, now)
 
 	accent := accentColor(it.toast.Level, tok.color)
-	fill := withAlpha(tintSurface(tok.color.Ramps.Neutral.Step(300), accent), alpha)
+	fill := withAlpha(tintSurface(tok.color.SurfaceAt(tokens.Level2), accent), alpha)
 	outline := withAlpha(accent, alpha)
 	fg := withAlpha(tok.color.Text, alpha)
 
@@ -537,7 +551,7 @@ func luminance(c color.NRGBA) int { return int(c.R) + int(c.G) + int(c.B) }
 
 // tintSurface blends 20% of the accent over the given base. Strong
 // enough that the fill itself separates from Surface-painted panes;
-// paired with the neutral step-300 base in paintToast.
+// paired with the level-2 (SurfaceAt(Level2)) base in paintToast.
 func tintSurface(base, accent color.NRGBA) color.NRGBA {
 	return blend(base, accent, 0x33)
 }

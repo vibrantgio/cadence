@@ -1,8 +1,17 @@
 // Package popover provides the Cadence Popover pattern: an anchored
-// elevated Surface placed adjacent to a caller-supplied anchor widget,
+// elevated surface placed adjacent to a caller-supplied anchor widget,
 // with a small triangular tail glyph pointing at the anchor. Outside-
 // click dismissal and popover-vs-popover arbitration are coordinated via
 // prism/coordination — opening a second popover dismisses the first.
+//
+// Elevation (goal G-E2): the popover surface (and its tail) fills at
+// SurfaceAt(Level3) (Neutral step 400), the deepest rung of the ladder.
+// A popover is an unscrimmed, shadowless transient overlay — unlike the
+// modal (level 2), which has a scrim, and the toast (level-2 base),
+// which keeps its cast shadow and accent outline, the popover's fill
+// plus its 1 dp Neutral step-500 stroke are its only separation cues,
+// so it takes the deepest tonal step. prism/input's dropdown menu, the
+// same overlay class, sits at the same level.
 //
 // The package follows the Phase 4 Composition contract: Popover is a
 // callable Go function consuming a Prism theme observable, returning a
@@ -68,6 +77,10 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
+	// elevation is snapshotted so a theme elevation change re-emits the
+	// widget; the surface fill resolves through SurfaceAt, which reads
+	// the default tokens.Elevation scale.
+	elevation tokens.ElevationScale
 }
 
 // Popover returns an rx.Observable[layout.Widget] that emits a new widget
@@ -80,9 +93,9 @@ func Popover(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	}
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Radius),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Elevation),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.ElevationScale]) resolvedTokens {
+				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, elevation: n.Fourth}
 			},
 		)
 	})
@@ -262,14 +275,17 @@ func drawPopover(
 
 	// 5. Surface + tail + content, only when open. The surface absorbs
 	//    presses; the tail is a triangular path bridging the gap to the
-	//    anchor, drawn in the surface fill colour.
+	//    anchor, drawn in the surface fill colour. Level 3 on the
+	//    elevation ladder: an unscrimmed, shadowless transient overlay
+	//    separates by fill alone (see the package doc).
 	if openNow {
+		fill := tok.color.SurfaceAt(tokens.Level3)
 		surfOff := op.Offset(surfaceRect.Min).Push(gtx.Ops)
 		surfRRect := clip.RRect{
 			Rect: image.Rectangle{Max: surfaceRect.Size()},
 			SE:   r, SW: r, NE: r, NW: r,
 		}
-		paint.FillShape(gtx.Ops, tok.color.Surface, surfRRect.Op(gtx.Ops))
+		paint.FillShape(gtx.Ops, fill, surfRRect.Op(gtx.Ops))
 		paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{
 			Path:  surfRRect.Path(gtx.Ops),
 			Width: float32(gtx.Dp(unit.Dp(1))),
@@ -284,7 +300,7 @@ func drawPopover(
 		contentOff.Pop()
 		surfOff.Pop()
 
-		drawTail(gtx, anchorRect, surfaceRect, props.Placement, tailW, tailH, tok.color.Surface)
+		drawTail(gtx, anchorRect, surfaceRect, props.Placement, tailW, tailH, fill)
 	}
 
 	if live {

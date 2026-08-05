@@ -9,6 +9,15 @@
 // stream of layout.Widget. The source is intentionally short and free of
 // opaque configuration — copy it into your own app and modify as needed.
 //
+// Elevation (goal G-E2): the tooltip deliberately takes NO rung on the
+// tonal elevation ladder. Its bubble is inverse-video — it fills with
+// the high-contrast Text colour and paints its label in Surface —
+// because a tooltip is too small for a one-or-two-step neutral fill to
+// read at a glance; inversion is the stronger cue for a tiny transient
+// annotation (Material's tooltips use an inverse surface for the same
+// reason). Were it on the ladder it would sit with the other unscrimmed
+// transient overlays at level 3.
+//
 // The trigger renders at the canvas centre; the tooltip surface is placed
 // adjacent per Placement. Show/hide is instantaneous in this package;
 // entrance/exit transitions are deferred to a later Pulse-integration

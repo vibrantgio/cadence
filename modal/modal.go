@@ -1,6 +1,15 @@
 // Package modal provides the Cadence Modal pattern: a centered elevated
-// Surface dialog over a full-window scrim backdrop, with a header (title +
+// surface dialog over a full-window scrim backdrop, with a header (title +
 // close affordance), padded body, and optional footer action row.
+//
+// Elevation (goal G-E2): the dialog surface fills at SurfaceAt(Level2)
+// (Neutral step 300), one storey above the standing level-1 content
+// panes it covers, with the 1 dp Neutral step-500 stroke. Level 2 — not
+// the deeper level 3 that unscrimmed overlays (popover, dropdown menu)
+// take — because the modal does not separate by fill alone: the scrim
+// dims everything beneath it and is the modal's isolating cue, so its
+// surface needs only one tonal storey. No shadow: E2.2 reserved cast
+// shadows for surfaces that float and can leave without a scrim.
 //
 // The package follows the Phase 4 Composition contract: Modal is a callable
 // Go function consuming a Prism theme observable, returning a stream of
@@ -102,6 +111,10 @@ type resolvedTokens struct {
 	radius  tokens.RadiusScale
 	title   tokens.TextStyle // the TitleMedium role: typeface, weight, size, line height
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
+	// elevation is snapshotted so a theme elevation change re-emits the
+	// widget; the surface fill resolves through SurfaceAt, which reads
+	// the default tokens.Elevation scale.
+	elevation tokens.ElevationScale
 }
 
 // Modal returns an rx.Observable[layout.Widget] that emits a new widget
@@ -120,15 +133,16 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Elevation),
+			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.ElevationScale]) resolvedTokens {
 				typ := n.Fourth
 				return resolvedTokens{
-					color:   n.First,
-					spacing: n.Second,
-					radius:  n.Third,
-					title:   typ.TitleMedium,
-					shaper:  typ.Shaper(),
+					color:     n.First,
+					spacing:   n.Second,
+					radius:    n.Third,
+					title:     typ.TitleMedium,
+					shaper:    typ.Shaper(),
+					elevation: n.Fifth,
 				}
 			},
 		)
@@ -321,9 +335,12 @@ func drawModal(
 
 	// Surface — rounded rectangle, registered as a pointer absorber so
 	// presses on its area do not reach the scrim and dismiss the modal.
+	// Level 2 on the elevation ladder: one tonal storey above the level-1
+	// panes underneath; the scrim, not the fill, is the isolating cue
+	// (see the package doc).
 	off := op.Offset(surfPos).Push(gtx.Ops)
 	surfRRect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(surfW, surfH)}, SE: r, SW: r, NE: r, NW: r}
-	paint.FillShape(gtx.Ops, tok.color.Surface, surfRRect.Op(gtx.Ops))
+	paint.FillShape(gtx.Ops, tok.color.SurfaceAt(tokens.Level2), surfRRect.Op(gtx.Ops))
 	paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{
 		Path:  surfRRect.Path(gtx.Ops),
 		Width: float32(gtx.Dp(unit.Dp(1))),
