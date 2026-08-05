@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"gioui.org/f32"
-	"gioui.org/font/gofont"
 	"gioui.org/gpu/headless"
 	"gioui.org/io/event"
 	gioinput "gioui.org/io/input"
@@ -29,8 +28,8 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/modal"
 	"github.com/vibrantgio/prism/button"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
@@ -48,7 +47,7 @@ var (
 
 func defaultShaper(t *testing.T) *text.Shaper {
 	t.Helper()
-	return text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	return tokens.DefaultTypography.Shaper()
 }
 
 // fillRect is a sharp-edged solid widget used as a Body or Action stand-in.

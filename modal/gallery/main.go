@@ -21,7 +21,6 @@ import (
 
 	"gioui.org/app"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/event"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -35,8 +34,8 @@ import (
 	"github.com/vibrantgio/cadence/modal"
 	"github.com/vibrantgio/prism/button"
 	"github.com/vibrantgio/prism/coordination"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 func main() {
@@ -72,7 +71,9 @@ type demo struct {
 }
 
 func run(w *app.Window) error {
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	// The theme's cached Roboto shaper (ADR-003) — the same one the modal
+	// and buttons default to when Props.Shaper is nil.
+	shaper := tokens.DefaultTypography.Shaper()
 	d := &demo{win: w, shaper: shaper}
 
 	// Static theme — emits once synchronously, so .First() returns immediately

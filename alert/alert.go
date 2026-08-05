@@ -29,7 +29,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -40,8 +39,8 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Variant selects the alert's semantic palette.
@@ -61,37 +60,57 @@ type Props struct {
 	Title   string
 	Body    layout.Widget
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts.
-	// The default shaper is created once per subscription inside the
-	// rx.Defer scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the alert then shapes its title with
+	// the theme's shaper (Typography.Shaper()), which is built once and
+	// cached inside the theme's Typography value. Set it only when this
+	// instance must shape with a different shaper than the theme provides.
 	Shaper *text.Shaper
 }
 
 // Alert returns an rx.Observable[layout.Widget] that emits a new widget
 // whenever any consumed theme token changes.
 func Alert(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the TitleMedium text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					title:   typ.TitleMedium,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
-			return Render(shaper, props, tok.color, tok.spacing, tok.radius, tok.typ)
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
+			return func(gtx layout.Context) layout.Dimensions {
+				return drawAlert(gtx, shaper, props, tok.color, tok.spacing, tok.radius, tok.title)
+			}
 		})
 	})
 }
 
 // Render produces a layout.Widget for an alert with pre-resolved tokens.
 // Intended for golden-image testing and static demonstrations; production
-// code should use Alert.
+// code should use Alert, which takes the shaper and the TitleMedium text
+// style from the theme's Typography. The TypeScale parameter contributes
+// only the TitleMedium size; the title falls back to a SemiBold weight
+// (matching the pre-Typography rendering) and the shaper's default
+// typeface and line height.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -101,7 +120,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawAlert(gtx, shaper, props, colors, sp, rad, ts)
+		return drawAlert(gtx, shaper, props, colors, sp, rad, tokens.TextStyle{Size: ts.TitleMedium})
 	}
 }
 
@@ -109,12 +128,13 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	title   tokens.TextStyle // the TitleMedium role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 const iconDp = 20
 
-func drawAlert(gtx layout.Context, shaper *text.Shaper, props Props, colors tokens.ColorTokens, sp tokens.SpacingScale, rad tokens.RadiusScale, ts tokens.TypeScale) layout.Dimensions {
+func drawAlert(gtx layout.Context, shaper *text.Shaper, props Props, colors tokens.ColorTokens, sp tokens.SpacingScale, rad tokens.RadiusScale, title tokens.TextStyle) layout.Dimensions {
 	size := gtx.Constraints.Max
 	r := gtx.Dp(unit.Dp(rad.Lg))
 
@@ -128,7 +148,7 @@ func drawAlert(gtx layout.Context, shaper *text.Shaper, props Props, colors toke
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Start}.Layout(gtx,
 			layout.Rigid(iconWidget(iconDp, accent)),
 			layout.Rigid(pllayout.HSpacer(sp.S3)),
-			layout.Flexed(1, contentColumn(shaper, props, colors, sp, ts)),
+			layout.Flexed(1, contentColumn(shaper, props, colors, sp, title)),
 		)
 	})
 
@@ -147,11 +167,11 @@ func iconWidget(sizeDp float32, col color.NRGBA) layout.Widget {
 	}
 }
 
-func contentColumn(shaper *text.Shaper, props Props, colors tokens.ColorTokens, sp tokens.SpacingScale, ts tokens.TypeScale) layout.Widget {
+func contentColumn(shaper *text.Shaper, props Props, colors tokens.ColorTokens, sp tokens.SpacingScale, title tokens.TextStyle) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		var ws []layout.Widget
 		if props.Title != "" {
-			ws = append(ws, titleWidget(shaper, props.Title, colors.OnSurface, ts))
+			ws = append(ws, titleWidget(shaper, props.Title, colors.OnSurface, title))
 		}
 		if props.Body != nil {
 			if len(ws) > 0 {
@@ -166,13 +186,25 @@ func contentColumn(shaper *text.Shaper, props Props, colors tokens.ColorTokens, 
 	}
 }
 
-func titleWidget(shaper *text.Shaper, label string, fg color.NRGBA, ts tokens.TypeScale) layout.Widget {
+func titleWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
+		// Shape with the TitleMedium role's typeface, weight, size and
+		// line height. The legacy Render path synthesizes a size-only
+		// style; its zero weight falls back to SemiBold so the title keeps
+		// its pre-Typography emphasis against the body.
+		f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: font.SemiBold}
+		if style.Weight != 0 {
+			f.Weight = tokens.FontWeight(style.Weight)
+		}
 		wl := widget.Label{MaxLines: 1}
-		return wl.Layout(gtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(ts.TitleMedium), label, material)
+		if style.LineHeight != 0 {
+			wl.LineHeight = unit.Sp(style.LineHeight)
+			wl.LineHeightScale = 1
+		}
+		return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), label, material)
 	}
 }
 

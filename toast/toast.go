@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -35,10 +34,10 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/coordination"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
 	"github.com/vibrantgio/pulse/depth"
 	"github.com/vibrantgio/pulse/tween"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Level selects the toast's semantic palette.
@@ -84,9 +83,12 @@ type Props struct {
 	Position Position
 	Lifetime time.Duration
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
-	// default shaper is created once per subscription inside the
-	// rx.Defer scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the stack then shapes its toast text
+	// with the theme's shaper (Typography.Shaper()), which is built once
+	// and cached inside the theme's Typography value. Set it only when
+	// this instance must shape with a different shaper than the theme
+	// provides.
 	Shaper *text.Shaper
 }
 
@@ -113,7 +115,8 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	style   tokens.TextStyle // the LabelMedium role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Stack returns an rx.Observable[layout.Widget] that renders a positioned
@@ -125,19 +128,25 @@ func Stack(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 	if lifetime <= 0 {
 		lifetime = DefaultLifetime
 	}
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelMedium text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					style:   typ.LabelMedium,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		st := newStackState()
 		// Each Notify emission mutates st (queuing the new toast) and
 		// surfaces as a struct{} ping. StartWith seeds CombineLatest so
@@ -148,6 +157,12 @@ func Stack(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 		}).StartWith(struct{}{})
 		return rx.Map(rx.CombineLatest2(resolved, pings), func(n rx.Tuple2[resolvedTokens, struct{}]) layout.Widget {
 			tok := n.First
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				return drawStackLive(gtx, shaper, props, lifetime, tok, st)
 			}
@@ -157,8 +172,11 @@ func Stack(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 
 // Render produces a layout.Widget for a fixed []Toast snapshot with
 // pre-resolved tokens. Intended for golden-image testing and static
-// demonstrations; production code should use Stack. The returned widget
-// performs no input handling, no fading, and does not consume the
+// demonstrations; production code should use Stack, which takes the
+// shaper and the LabelMedium text style from the theme's Typography. The
+// TypeScale parameter contributes only the LabelMedium size; typeface,
+// weight and line height stay at the shaper's defaults. The returned
+// widget performs no input handling, no fading, and does not consume the
 // package-scoped Subject.
 func Render(
 	shaper *text.Shaper,
@@ -169,7 +187,7 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, style: tokens.TextStyle{Size: ts.LabelMedium}}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawStackStatic(gtx, shaper, props, toasts, tok)
 	}
@@ -405,8 +423,20 @@ func paintToast(
 	labelGtx.Constraints = layout.Constraints{
 		Max: image.Pt(gtx.Constraints.Max.X-2*padH, gtx.Constraints.Max.Y),
 	}
+	// Shape with the LabelMedium role's typeface, weight, size and line
+	// height. Zero fields (the legacy Render path synthesizes a size-only
+	// style) fall back to the shaper's defaults.
+	style := tok.style
+	f := font.Font{Typeface: font.Typeface(style.Typeface)}
+	if style.Weight != 0 {
+		f.Weight = tokens.FontWeight(style.Weight)
+	}
 	wl := widget.Label{MaxLines: 1}
-	labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(tok.typ.LabelMedium), it.toast.Text, material)
+	if style.LineHeight != 0 {
+		wl.LineHeight = unit.Sp(style.LineHeight)
+		wl.LineHeightScale = 1
+	}
+	labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), it.toast.Text, material)
 	labelCall := mLabel.Stop()
 
 	w := gtx.Constraints.Max.X

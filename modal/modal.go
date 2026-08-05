@@ -30,7 +30,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
@@ -45,8 +44,8 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/button"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Props configures a Modal. Body and OnClose may both be nil; Actions may
@@ -88,9 +87,12 @@ type Props struct {
 	// participate in keyboard focus.
 	ActionFocusTags []event.Tag
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The default
-	// shaper is created once per subscription inside the rx.Defer scope, so
-	// it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper. Leave
+	// it nil in normal use: the modal then shapes its title with the theme's
+	// shaper (Typography.Shaper()), which is built once and cached inside
+	// the theme's Typography value, and the close button likewise falls back
+	// to the theme shaper. Set it only when this instance must shape with a
+	// different shaper than the theme provides.
 	Shaper *text.Shaper
 }
 
@@ -98,7 +100,8 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	title   tokens.TextStyle // the TitleMedium role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Modal returns an rx.Observable[layout.Widget] that emits a new widget
@@ -112,21 +115,26 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 		open = rx.Of(false)
 	}
 
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the TitleMedium text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					title:   typ.TitleMedium,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
-
 		st := newState()
 
 		// The close affordance is a prism/button icon-only variant. The modal
@@ -142,7 +150,9 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 				Description: "Close",
 				Clickable:   &st.closeClick,
 				OnClick:     props.OnClose,
-				Shaper:      shaper,
+				// Pass the override through untouched: a nil Shaper lets
+				// the button default to the theme's shaper on its own.
+				Shaper: props.Shaper,
 			})
 		}
 
@@ -150,6 +160,13 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 
 		return rx.Map(inputs, func(next rx.Tuple3[resolvedTokens, bool, layout.Widget]) layout.Widget {
 			tok, openNow, closeW := next.First, next.Second, next.Third
+
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 
 			// Transition tracking — push on open, pop on close.
 			if openNow && !st.pushed {
@@ -175,10 +192,14 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 
 // Render produces a layout.Widget for a modal with pre-resolved tokens and
 // an explicit open flag. Intended for golden-image testing and static
-// demonstrations; production code should use Modal. The returned widget
-// performs no input handling: pass open=true to render the scrim and
-// surface, open=false to render nothing (the widget consumes the
-// constraints but paints no pixels).
+// demonstrations; production code should use Modal, which takes the shaper
+// and the TitleMedium text style from the theme's Typography. The TypeScale
+// parameter contributes only the TitleMedium size; the title falls back to
+// a SemiBold weight (matching the pre-Typography rendering) and the
+// shaper's default typeface and line height. The returned widget performs
+// no input handling: pass open=true to render the scrim and surface,
+// open=false to render nothing (the widget consumes the constraints but
+// paints no pixels).
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -188,7 +209,7 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, title: tokens.TextStyle{Size: ts.TitleMedium}}
 	st := newState()
 	// Static, inert close affordance: the same icon painter the live path
 	// uses, rendered through button.RenderIcon so goldens stay text-free and
@@ -373,8 +394,21 @@ func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, closeWid
 			mColor := op.Record(gtx.Ops)
 			paint.ColorOp{Color: tok.color.OnSurface}.Add(gtx.Ops)
 			material := mColor.Stop()
+			// Shape with the TitleMedium role's typeface, weight, size and
+			// line height. The legacy Render path synthesizes a size-only
+			// style; its zero weight falls back to SemiBold so the title
+			// keeps its pre-Typography emphasis against the body.
+			style := tok.title
+			f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: font.SemiBold}
+			if style.Weight != 0 {
+				f.Weight = tokens.FontWeight(style.Weight)
+			}
 			wl := widget.Label{MaxLines: 1}
-			return wl.Layout(gtx, shaper, font.Font{Weight: font.SemiBold}, unit.Sp(tok.typ.TitleMedium), props.Title, material)
+			if style.LineHeight != 0 {
+				wl.LineHeight = unit.Sp(style.LineHeight)
+				wl.LineHeightScale = 1
+			}
+			return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), props.Title, material)
 		})
 		if closeWidget == nil {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, titleFlex)

@@ -5,16 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"gioui.org/font/gofont"
 	gioinput "gioui.org/io/input"
 	"gioui.org/layout"
 	"gioui.org/op"
-	"gioui.org/text"
 	"gioui.org/unit"
 
 	"github.com/reactivego/rx"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 const intCanvasW, intCanvasH = 320, 240
@@ -26,7 +24,7 @@ func intTok() resolvedTokens {
 		color:   tokens.DefaultLight,
 		spacing: tokens.Spacing,
 		radius:  tokens.RadiusScale{},
-		typ:     tokens.DefaultTypeScale,
+		style:   tokens.DefaultTypography.LabelMedium,
 	}
 }
 
@@ -51,7 +49,7 @@ func driveFrameAt(w layout.Widget, ops *op.Ops, r *gioinput.Router, size image.P
 // package-scoped Subject across tests.
 func TestNotifyAddsAndLifetimeExpires(t *testing.T) {
 	const lifetime = 200 * time.Millisecond
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	shaper := tokens.DefaultTypography.Shaper()
 	props := Props{Position: TopRight, Lifetime: lifetime, Shaper: shaper}
 	st := newStackState()
 

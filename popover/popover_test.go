@@ -23,8 +23,8 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/popover"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")

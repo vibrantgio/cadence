@@ -5,7 +5,6 @@ import (
 	"image"
 	"testing"
 
-	"gioui.org/font/gofont"
 	"gioui.org/io/event"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/key"
@@ -17,8 +16,8 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/button"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // TestTabCyclesFocusAmongModalTags strengthens Measurable (b) — Tab "cycles
@@ -27,7 +26,7 @@ import (
 // trap tests cover the "does not escape" clause; this in-package test
 // covers the "cycles" clause by reading the unexported focus-tag slice.
 func TestTabCyclesFocusAmongModalTags(t *testing.T) {
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	shaper := tokens.DefaultTypography.Shaper()
 
 	// Two prism/button actions, each keyed to its own caller-owned clickable.
 	// Those clickables are the action focus tags (route (a)); the modal owns
@@ -54,7 +53,7 @@ func TestTabCyclesFocusAmongModalTags(t *testing.T) {
 		color:   tokens.DefaultLight,
 		spacing: tokens.Spacing,
 		radius:  tokens.RadiusScale{},
-		typ:     tokens.DefaultTypeScale,
+		title:   tokens.DefaultTypography.TitleMedium,
 	}
 
 	// Build the live close button so &st.closeClick is registered as a focus

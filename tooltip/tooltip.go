@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/gesture"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
@@ -33,8 +32,8 @@ import (
 	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // DefaultDelay is the show-after-entry delay applied when Props.Delay is
@@ -59,9 +58,11 @@ type Props struct {
 	Delay     time.Duration
 	Placement Placement
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
-	// default shaper is created once per subscription inside the
-	// rx.Defer scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the tooltip then shapes its label with
+	// the theme's shaper (Typography.Shaper()), which is built once and
+	// cached inside the theme's Typography value. Set it only when this
+	// instance must shape with a different shaper than the theme provides.
 	Shaper *text.Shaper
 }
 
@@ -69,7 +70,8 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	style   tokens.TextStyle // the LabelSmall role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Tooltip returns an rx.Observable[layout.Widget] that emits a new widget
@@ -81,21 +83,33 @@ func Tooltip(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	if delay <= 0 {
 		delay = DefaultDelay
 	}
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelSmall text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					style:   typ.LabelSmall,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		st := newState()
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				return drawTooltip(gtx, shaper, props, delay, tok, st, true)
 			}
@@ -105,7 +119,10 @@ func Tooltip(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 
 // Render produces a layout.Widget for a tooltip with pre-resolved tokens
 // and an explicit shown flag. Intended for golden-image testing and
-// static demonstrations; production code should use Tooltip. The returned
+// static demonstrations; production code should use Tooltip, which takes
+// the shaper and the LabelSmall text style from the theme's Typography.
+// The TypeScale parameter contributes only the LabelSmall size; typeface,
+// weight and line height stay at the shaper's defaults. The returned
 // widget performs no input handling or arbitration: pass shown=true to
 // render the trigger plus the floating surface, shown=false to render
 // only the trigger.
@@ -118,7 +135,7 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, style: tokens.TextStyle{Size: ts.LabelSmall}}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawStatic(gtx, shaper, props, tok, shown)
 	}
@@ -291,9 +308,21 @@ func drawSurface(
 	labelGtx := gtx
 	labelGtx.Constraints = layout.Constraints{Max: image.Pt(canvas.X*3/4, canvas.Y/4)}
 	labelGtx.Constraints.Min = image.Point{}
-	mLabel := op.Record(gtx.Ops)
+	// Shape with the LabelSmall role's typeface, weight, size and line
+	// height. Zero fields (the legacy Render path synthesizes a size-only
+	// style) fall back to the shaper's defaults.
+	style := tok.style
+	f := font.Font{Typeface: font.Typeface(style.Typeface)}
+	if style.Weight != 0 {
+		f.Weight = tokens.FontWeight(style.Weight)
+	}
 	wl := widget.Label{MaxLines: 1}
-	labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(tok.typ.LabelSmall), props.Text, material)
+	if style.LineHeight != 0 {
+		wl.LineHeight = unit.Sp(style.LineHeight)
+		wl.LineHeightScale = 1
+	}
+	mLabel := op.Record(gtx.Ops)
+	labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), props.Text, material)
 	labelCall := mLabel.Stop()
 
 	surfW := labelDims.Size.X + 2*padH

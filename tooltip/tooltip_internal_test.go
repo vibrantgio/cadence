@@ -7,17 +7,15 @@ import (
 	"time"
 
 	"gioui.org/f32"
-	"gioui.org/font/gofont"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
-	"gioui.org/text"
 	"gioui.org/unit"
 
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // These interaction tests are white-box because tooltip exposes no
@@ -43,7 +41,7 @@ func intTok() resolvedTokens {
 		color:   tokens.DefaultLight,
 		spacing: tokens.Spacing,
 		radius:  tokens.RadiusScale{},
-		typ:     tokens.DefaultTypeScale,
+		style:   tokens.DefaultTypography.LabelSmall,
 	}
 }
 
@@ -65,7 +63,7 @@ func driveFrameAt(w layout.Widget, ops *op.Ops, r *gioinput.Router, size image.P
 // delay, st.shown must remain false.
 func TestHoverEntryAfterDelayShows(t *testing.T) {
 	const delay = 50 * time.Millisecond
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	shaper := tokens.DefaultTypography.Shaper()
 	props := Props{Text: "Save", Trigger: intTrigger(), Placement: Top, Shaper: shaper}
 	st := newState()
 	t.Cleanup(func() { clearTop(st.id) })
@@ -112,7 +110,7 @@ func TestHoverEntryAfterDelayShows(t *testing.T) {
 // hover Leave hides it (st.shown flips back to false).
 func TestHoverExitHides(t *testing.T) {
 	const delay = 50 * time.Millisecond
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	shaper := tokens.DefaultTypography.Shaper()
 	props := Props{Text: "Save", Trigger: intTrigger(), Placement: Top, Shaper: shaper}
 	st := newState()
 	t.Cleanup(func() { clearTop(st.id) })
@@ -153,7 +151,7 @@ func TestHoverExitHides(t *testing.T) {
 // longer holds it).
 func TestSecondTooltipDismissesFirst(t *testing.T) {
 	const delay = 50 * time.Millisecond
-	shaper := text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	shaper := tokens.DefaultTypography.Shaper()
 	props := Props{Text: "Save", Trigger: intTrigger(), Placement: Top, Shaper: shaper}
 	st := newState()
 	t.Cleanup(func() { clearTop(st.id) })
