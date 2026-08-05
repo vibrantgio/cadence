@@ -17,10 +17,14 @@
 // it, so wiring the affordance to nothing leaves a sidebar that cannot
 // collapse.
 //
-// Items are stacked at a fixed 48 dp pitch with no scroll region: a list
-// longer than the column is tall simply paints past the bottom edge.
-// Wrap the pattern in your own scroll, or copy the file and swap the loop
-// in drawSidebar for a prism/list.
+// Items are stacked at the density's row pitch — exactly
+// Density.ControlHeight (E1.4; 36 dp Comfortable, 28 dp Compact) — with
+// no scroll region: a list longer than the column is tall simply paints
+// past the bottom edge. Wrap the pattern in your own scroll, or copy the
+// file and swap the loop in drawSidebar for a prism/list. Items are
+// stacked full-width rows, so each row's hit area stays the row bounds
+// (extending it to the 44 dp pointer floor would steal the neighbouring
+// row's slop).
 //
 // Keyboard reach stops at the items. Each Item with a non-nil OnClick
 // takes focus, and Arrow-Up/Down move between them, skipping the ones
@@ -86,11 +90,12 @@ type Props struct {
 // Width constants.
 // SpacingScale tops out at S24 = 96 dp, so the "~S48" expanded width
 // cited in PLAN G4.3b is materialised as a local 192 dp constant
-// (≈ 4 × S12) rather than a new spacing-token field.
+// (≈ 4 × S12) rather than a new spacing-token field. Widths do not
+// follow density (the column contract is fixed); the item and toggle
+// heights do — both are exactly Density.ControlHeight (E1.4 row rule).
 const (
 	expandedDp  = 192
 	collapsedDp = 48
-	itemDp      = 48
 	iconColDp   = 48
 )
 
@@ -98,6 +103,7 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	density tokens.Density   // item/toggle height source (E1.4)
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
@@ -117,13 +123,14 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest4(t.Color, t.Spacing, t.Typography, t.Density),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Third
 				return resolvedTokens{
 					color:   n.First,
 					spacing: n.Second,
 					label:   typ.LabelLarge,
+					density: n.Fourth,
 					shaper:  typ.Shaper(),
 				}
 			},
@@ -143,7 +150,7 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 			}
 			return func(gtx layout.Context) layout.Dimensions {
 				processInput(gtx, props, clicks, &toggleTag)
-				return drawSidebar(gtx, shaper, props, clicks, &toggleTag, col, tok.color, tok.spacing, tok.label)
+				return drawSidebar(gtx, shaper, props, clicks, &toggleTag, col, tok.color, tok.spacing, tok.label, tok.density)
 			}
 		})
 	})
@@ -155,7 +162,9 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 // production code should use Sidebar, which takes the shaper and the
 // LabelLarge text style from the theme's Typography. The TypeScale
 // parameter contributes only the LabelLarge size; typeface, weight and
-// line height stay at the shaper's defaults.
+// line height stay at the shaper's defaults. Density is not a parameter
+// (the signature predates E1.4): the static path renders at
+// tokens.Comfortable; density-aware rendering goes through Sidebar.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -165,7 +174,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawSidebar(gtx, shaper, props, nil, nil, collapsed, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
+		return drawSidebar(gtx, shaper, props, nil, nil, collapsed, colors, sp, tokens.TextStyle{Size: ts.LabelLarge}, tokens.Comfortable)
 	}
 }
 
@@ -241,6 +250,7 @@ func drawSidebar(
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	style tokens.TextStyle,
+	d tokens.Density,
 ) layout.Dimensions {
 	widthDp := float32(expandedDp)
 	if collapsed {
@@ -252,12 +262,14 @@ func drawSidebar(
 
 	paint.FillShape(gtx.Ops, colors.Surface, clip.Rect{Max: size}.Op())
 
-	// Toggle affordance at the top.
-	toggleH := gtx.Dp(unit.Dp(itemDp))
+	// Toggle affordance at the top: a row like the items, so it shares
+	// the density's control height.
+	toggleH := gtx.Dp(unit.Dp(d.ControlHeight))
 	drawToggle(gtx, tt, image.Pt(w, toggleH), colors)
 
-	// Items stacked vertically below the toggle.
-	itemH := gtx.Dp(unit.Dp(itemDp))
+	// Items stacked vertically below the toggle at the density's row
+	// pitch (E1.4 row rule: exactly ControlHeight).
+	itemH := gtx.Dp(unit.Dp(d.ControlHeight))
 	for i, it := range props.Items {
 		off := image.Pt(0, toggleH+i*itemH)
 		stk := op.Offset(off).Push(gtx.Ops)

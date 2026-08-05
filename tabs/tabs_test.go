@@ -160,9 +160,9 @@ func driveFrame(w layout.Widget, ops *op.Ops, r *gioinput.Router, size image.Poi
 
 // TestTabsArrowAndHomeEndWrapAndFocus drives the WAI-ARIA tab pattern
 // end-to-end. Three empty-label tabs render with cellW = 2×S3 = 24 px
-// and stripH = 40 px (PxPerDp = 1), so tab 0 occupies x∈[0,24] y∈[0,40]
-// — a pointer click at (12, 20) lands squarely inside tab 0 and gives
-// it focus.
+// and stripH = 36 px (the Comfortable control height, E1.4; PxPerDp = 1),
+// so tab 0 occupies x∈[0,24] y∈[0,36] — a pointer click at (12, 20)
+// lands squarely inside tab 0 and gives it focus.
 //
 // Focus-follows-selection is verified using the "Enter trick": each
 // arrow / Home / End press is followed by a Press+Release of NameReturn
@@ -241,6 +241,27 @@ func equalInts(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+// densityTheme returns a theme whose density is d, with sharp corners
+// for golden determinism — the E1.4 injection idiom, mirroring prism's
+// density tests.
+func densityTheme(d tokens.Density) theme.Theme {
+	th := theme.Default()
+	th.Density = rx.Of(d)
+	th.Radius = rx.Of(tokens.RadiusScale{})
+	return th
+}
+
+// TestTabsCompactGolden records or diffs the compact-density golden
+// through the LIVE pipeline (the static Render path is frozen at
+// tokens.Comfortable): the strip height drops from 36 to 28 dp
+// (ControlHeight) and the content panel grows by the difference.
+func TestTabsCompactGolden(t *testing.T) {
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	props := tabs.Props{Tabs: threeTabs(), Selected: rx.Of(0), Shaper: defaultShaper(t)}
+	w := liveWidget(t, tabs.Tabs(rx.Of(densityTheme(tokens.Compact)), props))
+	renderGolden(t, "light-compact-three-tabs-first-selected", canvasSize, scene(w, lightBG))
 }
 
 // ---- golden harness (inlined; prism/internal/golden is not importable

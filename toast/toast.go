@@ -297,6 +297,11 @@ func drawStackStatic(
 	return paintStack(gtx, shaper, props, tok, items, 0, time.Time{})
 }
 
+// Toast surface metrics. The toast is a transient notification surface,
+// not a control: its height hugs the label plus spacing-scale padding,
+// and toastMinHDp is a legibility floor, so none of it follows density
+// (E1.4 verdict — the 36 dp floor coinciding with the Comfortable control
+// height is incidental).
 const (
 	toastWidthDp = 240
 	toastMinHDp  = 36

@@ -34,17 +34,21 @@ func stackedPageObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 	if len(sectionObs) > 0 {
 		sections = rx.CombineLatest(sectionObs...)
 	}
-	inputs := rx.CombineLatest3(colorObs, nb, sections)
+	densityObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[tokens.Density] {
+		return t.Density
+	})
+	inputs := rx.CombineLatest4(colorObs, nb, sections, densityObs)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
 		// The scroll position is captured once per subscription so it
 		// survives re-emissions for the lifetime of the Shell instance.
 		list := &layout.List{Axis: layout.Vertical}
-		return rx.Map(inputs, func(next rx.Tuple3[tokens.ColorTokens, layout.Widget, []layout.Widget]) layout.Widget {
+		return rx.Map(inputs, func(next rx.Tuple4[tokens.ColorTokens, layout.Widget, []layout.Widget, tokens.Density]) layout.Widget {
 			colors, nbW, secW := next.First, next.Second, next.Third
+			navH := navbarHeight(next.Fourth)
 			footer := props.Footer
 			maxW := props.ContentMaxWidth
 			return func(gtx layout.Context) layout.Dimensions {
-				return drawStackedPage(gtx, nbW, secW, footer, colors, maxW, list)
+				return drawStackedPage(gtx, nbW, secW, footer, colors, maxW, list, navH)
 			}
 		})
 	})
@@ -64,12 +68,14 @@ func RenderStackedPage(
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
+	// The static path renders at tokens.Comfortable (the Render signature
+	// predates E1.4); density-aware rendering goes through Shell.
 	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
 	list := &layout.List{Axis: layout.Vertical}
 	footer := props.Footer
 	maxW := props.ContentMaxWidth
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawStackedPage(gtx, nbW, sections, footer, colors, maxW, list)
+		return drawStackedPage(gtx, nbW, sections, footer, colors, maxW, list, navbarHeight(tokens.Comfortable))
 	}
 }
 
@@ -88,9 +94,10 @@ func drawStackedPage(
 	colors tokens.ColorTokens,
 	maxW unit.Dp,
 	list *layout.List,
+	navbarH unit.Dp,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
-	navH := gtx.Dp(unit.Dp(navbarHDp))
+	navH := gtx.Dp(navbarH)
 	if navH > size.Y {
 		navH = size.Y
 	}

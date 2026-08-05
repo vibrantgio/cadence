@@ -145,6 +145,44 @@ func TestShellGolden(t *testing.T) {
 	}
 }
 
+// densityTheme returns a theme whose density is d, with sharp corners
+// for golden determinism — the E1.4 injection idiom, mirroring prism's
+// density tests.
+func densityTheme(d tokens.Density) theme.Theme {
+	th := theme.Default()
+	th.Density = rx.Of(d)
+	th.Radius = rx.Of(tokens.RadiusScale{})
+	return th
+}
+
+// TestShellCompactGolden records or diffs the compact-density golden
+// through the LIVE pipeline (the static Render path is frozen at
+// tokens.Comfortable): the navbar slot pins at ControlHeight + 2·PaddingY
+// = 40 dp instead of 52, and the composed sidebar's item pitch drops to
+// 28 dp through its own density subscription.
+func TestShellCompactGolden(t *testing.T) {
+	shaper := defaultShaper(t)
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	mainFill := color.NRGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff}
+	th := densityTheme(tokens.Compact)
+
+	sbProps := sidebar.Props{
+		Items: []sidebar.Item{
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
+			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
+		},
+		Shaper: shaper,
+	}
+	props := shell.Props{
+		Layout:  shell.SidebarHeaderMain,
+		Sidebar: sidebar.Sidebar(rx.Of(th), sbProps),
+		Navbar:  navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
+		Main:    fillRect(mainFill),
+	}
+	w := liveWidget(t, shell.Shell(rx.Of(th), props))
+	renderGolden(t, "light-compact-sidebar-header-main", shmSize, scene(w, lightBG))
+}
+
 // ---- Interaction tests ----
 
 func liveWidget(t *testing.T, sh rx.Observable[layout.Widget]) layout.Widget {

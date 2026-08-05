@@ -132,7 +132,7 @@ func TestShellStackedPageContentMaxWidth(t *testing.T) {
 				return c.R == n.R && c.G == n.G && c.B == n.B && c.A == n.A
 			}
 			margin := (stackedW - tc.wantW) / 2
-			y := 64 + 30 // mid-band: navbar height + half the 60 px section
+			y := 52 + 30 // mid-band: Comfortable navbar height (52) + half the 60 px section
 			bg := tokens.DefaultLight.Background
 			if margin > 0 {
 				for _, x := range []int{0, margin - 1, margin + tc.wantW, stackedW - 1} {
@@ -152,8 +152,8 @@ func TestShellStackedPageContentMaxWidth(t *testing.T) {
 
 // TestShellStackedPageScrolls verifies that the shell-owned scroll
 // region both virtualizes (offscreen sections are never laid out) and
-// responds to pointer scroll events. Canvas 480×256 leaves a 192 px
-// body under the 64 px navbar; five 120 px sections total 600 px. At
+// responds to pointer scroll events. Canvas 480×256 leaves a 204 px
+// body under the 52 px navbar; five 120 px sections total 600 px. At
 // rest only sections 0 and 1 fit the viewport; after scrolling 300 px
 // the window covers sections 2–4 and section 0 must not be laid out.
 func TestShellStackedPageScrolls(t *testing.T) {

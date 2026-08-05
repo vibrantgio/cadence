@@ -159,13 +159,14 @@ type Props struct {
 	ContentMaxWidth unit.Dp
 }
 
-// Layout-affecting constants. The navbar and footer slots have fixed
-// heights so the main area is deterministic; the divider has a fixed
-// pixel width large enough to register a hit area on touch pointers.
-// The aside column tracks an absolute dp width clamped to
-// [minAsideDp, maxAsideDp].
+// Layout-affecting constants. The footer slot has a fixed height and the
+// navbar slot a density-derived one (see navbarHeight), so the main area
+// is deterministic; the divider has a fixed pixel width large enough to
+// register a hit area on touch pointers. The aside column tracks an
+// absolute dp width clamped to [minAsideDp, maxAsideDp]. The footer is a
+// status strip — a surface, not a control — so its height deliberately
+// does not follow density (E1.4 verdict).
 const (
-	navbarHDp      = 64
 	footerHDp      = 48
 	dividerDp      = 6
 	minRatio       = 0.05
@@ -174,6 +175,17 @@ const (
 	maxAsideDp     = 640
 	defaultAsideDp = 320
 )
+
+// navbarHeight returns the navbar slot's pinned height for a density:
+// ControlHeight + 2·PaddingY — a bar wrapping ControlHeight controls with
+// the density's vertical control padding as breathing room (52 dp
+// Comfortable, 40 dp Compact; E1.4). cadence/navbar insets its content by
+// the same PaddingY, so a prism/button action fills the slot exactly. The
+// pre-density 64 dp pin was sized around the 44 dp hit-target-era navbar
+// content, not a bar rule.
+func navbarHeight(d tokens.Density) unit.Dp {
+	return unit.Dp(d.ControlHeight + 2*d.PaddingY)
+}
 
 // Shell returns an rx.Observable[layout.Widget] that emits a new
 // widget whenever a consumed theme token, the SplitRatio observable,
@@ -231,11 +243,14 @@ func sidebarHeaderMainObservable(th rx.Observable[theme.Theme], props Props) rx.
 		sb = rx.Of[layout.Widget](emptyWidget)
 	}
 	nb := navbar.Navbar(th, props.Navbar)
-	combined := rx.CombineLatest2(sb, nb)
-	return rx.Map(combined, func(next rx.Tuple2[layout.Widget, layout.Widget]) layout.Widget {
-		sbW, nbW := next.First, next.Second
+	densityObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[tokens.Density] {
+		return t.Density
+	})
+	combined := rx.CombineLatest3(sb, nb, densityObs)
+	return rx.Map(combined, func(next rx.Tuple3[layout.Widget, layout.Widget, tokens.Density]) layout.Widget {
+		sbW, nbW, d := next.First, next.Second, next.Third
 		main := props.Main
-		return composeSidebarHeaderMain(sbW, nbW, main)
+		return composeSidebarHeaderMain(sbW, nbW, main, navbarHeight(d))
 	})
 }
 
@@ -250,20 +265,22 @@ func staticSidebarHeaderMain(
 	if sidebarW == nil {
 		sidebarW = emptyWidget
 	}
+	// The static path renders at tokens.Comfortable (the Render signature
+	// predates E1.4); density-aware rendering goes through Shell.
 	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
-	return composeSidebarHeaderMain(sidebarW, nbW, props.Main)
+	return composeSidebarHeaderMain(sidebarW, nbW, props.Main, navbarHeight(tokens.Comfortable))
 }
 
 // composeSidebarHeaderMain stacks the three slots so that Tab focus
 // traversal flows sidebar → navbar → main. Flex preserves child order
 // in the op stream, which is the order Gio's focus group walks.
-func composeSidebarHeaderMain(sb, nb, main layout.Widget) layout.Widget {
+func composeSidebarHeaderMain(sb, nb, main layout.Widget, navbarH unit.Dp) layout.Widget {
 	if main == nil {
 		main = emptyWidget
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		size := gtx.Constraints.Max
-		navH := gtx.Dp(unit.Dp(navbarHDp))
+		navH := gtx.Dp(navbarH)
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
 			layout.Rigid(sb),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {

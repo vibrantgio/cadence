@@ -1,8 +1,19 @@
 // Package pagination provides the Cadence Pagination pattern: a horizontal
 // row of numbered page buttons flanked by prev/next chevrons. The current
 // page button is highlighted via Primary/OnPrimary; the other page buttons
-// reuse prism/button with a neutral tinted-fill pair (neutral 300 fill,
-// neutral 700 label) so they remain visually distinct from the active page.
+// use a neutral tinted-fill pair (neutral 300 fill, neutral 700 label) so
+// they remain visually distinct from the active page.
+//
+// Page cells are drawn natively (E1.4). They previously bridged through
+// prism/button.Render, but that static bridge's frozen signature renders
+// at tokens.Comfortable — inside a density-sized ControlHeight square its
+// Comfortable PaddingX (16 dp) truncated the page digit to a sliver, and
+// nothing was gained: the bridge only ever drew the normal state (no
+// hover/press/focus visuals reached it). Drawing the cell here — the same
+// Primary/neutral fill, radius.Md corners, centred digit — keeps the
+// visuals aligned with prism/button while letting every metric follow the
+// density. The trade-off, accepted deliberately: future prism/button
+// styling changes must be mirrored here by hand.
 //
 // The package follows the Phase 4 Composition contract: Pagination is a
 // callable Go function consuming a Prism theme observable, returning a
@@ -20,9 +31,11 @@ import (
 	"strconv"
 
 	"gioui.org/f32"
+	"gioui.org/font"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/text"
@@ -30,7 +43,7 @@ import (
 	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
-	"github.com/vibrantgio/prism/button"
+	"github.com/vibrantgio/prism/icon"
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
@@ -64,14 +77,15 @@ func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Density),
+			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Fourth
 				return resolvedTokens{
 					color:   n.First,
 					spacing: n.Second,
 					radius:  n.Third,
 					label:   typ.LabelLarge,
+					density: n.Fifth,
 					shaper:  typ.Shaper(),
 				}
 			},
@@ -118,7 +132,9 @@ func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 // production code should use Pagination, which takes the shaper and the
 // LabelLarge text style from the theme's Typography. The TypeScale
 // parameter contributes only the LabelLarge size; typeface, weight and
-// line height stay at the shaper's defaults.
+// line height stay at the shaper's defaults. Density is not a parameter
+// (the signature predates E1.4): the static path renders at
+// tokens.Comfortable; density-aware rendering goes through Pagination.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -127,7 +143,7 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, label: tokens.TextStyle{Size: ts.LabelLarge}}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, label: tokens.TextStyle{Size: ts.LabelLarge}, density: tokens.Comfortable}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawPagination(gtx, shaper, props, nil, nil, nil, tok)
 	}
@@ -138,14 +154,19 @@ type resolvedTokens struct {
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
 	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	density tokens.Density   // cell square and chevron glyph source (E1.4)
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
-const (
-	cellWidthDp   = 40
-	cellHeightDp  = 44
-	chevronSizeDp = 16
-)
+// Cell metrics (E1.4): every pagination control is a Density.ControlHeight
+// square (36 dp Comfortable, 28 dp Compact — the old 40×44 cell was built
+// around the 44 dp pointer floor, which is a hit metric, not a control
+// height; the digit centres in the square like an icon-button glyph). The
+// chevron glyph takes the icon rule, icon.Size(d) = ControlHeight −
+// 2·PaddingY (20/16 dp), matching prism icon buttons. Cells are adjacent
+// controls separated by S2 gaps, so their hit area stays the cell bounds
+// (extending to the 44 dp pointer floor would overlap the neighbouring
+// cell's slop — the E1.3 stacked/tiled-controls precedent).
 
 func drawPagination(
 	gtx layout.Context,
@@ -181,47 +202,91 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 	return &clicks[i]
 }
 
-// pageCellWidget returns a fixed-width clickable cell rendering page n via
-// prism/button.Render. For the current page the real Primary/OnPrimary
-// tokens are used; for other pages a copy of the colour set substitutes a
-// neutral tinted fill (step 300) with low-contrast text (step 700) so they
-// remain visually distinct from both the active page and the surrounding
-// surface.
-//
-// button.Render is the static bridge, and its TypeScale parameter carries
-// only a size — so the LabelLarge role contributes its Size here while
-// typeface and weight resolve through the shaper (the theme's Typography
-// shaper in the Pagination path). The full role style flows through only
-// once prism/button grows a TextStyle-based static renderer.
+// pageCellWidget returns a clickable ControlHeight-square cell rendering
+// page n natively (see the package doc for why the prism/button.Render
+// bridge was dropped in E1.4). The current page uses the real
+// Primary/OnPrimary pair — prism/button's normal-state colours — and
+// other pages a neutral tinted fill (step 300) with low-contrast text
+// (step 700), so they remain visually distinct from both the active page
+// and the surrounding surface.
 func pageCellWidget(shaper *text.Shaper, n int, current bool, click *widget.Clickable, tok resolvedTokens) layout.Widget {
-	pageColors := tok.color
-	if !current {
-		pageColors.Primary = tok.color.Ramps.Neutral.Step(300)
-		pageColors.OnPrimary = tok.color.Ramps.Neutral.Step(700)
+	bg, fg := tok.color.Ramps.Neutral.Step(300), tok.color.Ramps.Neutral.Step(700)
+	if current {
+		bg, fg = tok.color.Primary, tok.color.OnPrimary
 	}
 	label := strconv.Itoa(n)
-	rendered := button.Render(shaper, label, pageColors, tok.spacing, tok.radius,
-		tokens.TypeScale{LabelLarge: tok.label.Size}, button.RenderState{})
 
 	return func(gtx layout.Context) layout.Dimensions {
-		cellW := gtx.Dp(unit.Dp(cellWidthDp))
-		cellH := gtx.Dp(unit.Dp(cellHeightDp))
+		side := gtx.Dp(unit.Dp(tok.density.ControlHeight))
 		cgtx := gtx
-		cgtx.Constraints.Min = image.Point{}
-		cgtx.Constraints.Max = image.Pt(cellW, cellH)
+		cgtx.Constraints = layout.Exact(image.Pt(side, side))
+		draw := func(gtx layout.Context) layout.Dimensions {
+			return drawPageCell(gtx, shaper, label, bg, fg, tok, side)
+		}
 		if click == nil {
-			return rendered(cgtx)
+			return draw(cgtx)
 		}
 		return click.Layout(cgtx, func(gtx layout.Context) layout.Dimensions {
 			semantic.LabelOp(label).Add(gtx.Ops)
 			semantic.EnabledOp(true).Add(gtx.Ops)
 			pointer.CursorPointer.Add(gtx.Ops)
-			return rendered(gtx)
+			return draw(gtx)
 		})
 	}
 }
 
-// chevronCellWidget renders a fixed-size chevron cell. pointsRight selects
+// drawPageCell paints one page-number cell: a side×side rounded square
+// (radius.Md, prism/button's corner) filled with bg, the digit shaped in
+// the LabelLarge role and centred. The digit is never truncated — the
+// square is the control, the digit its glyph, mirroring the icon-button
+// rule rather than the text-button padding rule.
+func drawPageCell(gtx layout.Context, shaper *text.Shaper, label string, bg, fg color.NRGBA, tok resolvedTokens, side int) layout.Dimensions {
+	rad := gtx.Dp(unit.Dp(tok.radius.Md))
+	rrect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(side, side)}, SE: rad, SW: rad, NE: rad, NW: rad}
+	paint.FillShape(gtx.Ops, bg, rrect.Op(gtx.Ops))
+
+	mColor := op.Record(gtx.Ops)
+	paint.ColorOp{Color: fg}.Add(gtx.Ops)
+	material := mColor.Stop()
+
+	labelGtx := gtx
+	labelGtx.Constraints.Min = image.Point{}
+	labelGtx.Constraints.Max = image.Pt(side, side)
+
+	// Shape with the LabelLarge role's typeface, weight, size and line
+	// height. Zero fields (the legacy Render path synthesizes a size-only
+	// style) fall back to the shaper's defaults.
+	style := tok.label
+	f := font.Font{Typeface: font.Typeface(style.Typeface)}
+	if style.Weight != 0 {
+		f.Weight = tokens.FontWeight(style.Weight)
+	}
+	wl := widget.Label{MaxLines: 1}
+	if style.LineHeight != 0 {
+		wl.LineHeight = unit.Sp(style.LineHeight)
+		wl.LineHeightScale = 1
+	}
+	mLabel := op.Record(gtx.Ops)
+	labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), label, material)
+	labelCall := mLabel.Stop()
+
+	offX := (side - labelDims.Size.X) / 2
+	offY := (side - labelDims.Size.Y) / 2
+	if offX < 0 {
+		offX = 0
+	}
+	if offY < 0 {
+		offY = 0
+	}
+	st := op.Offset(image.Pt(offX, offY)).Push(gtx.Ops)
+	labelCall.Add(gtx.Ops)
+	st.Pop()
+
+	return layout.Dimensions{Size: image.Pt(side, side)}
+}
+
+// chevronCellWidget renders a ControlHeight-square chevron cell whose
+// glyph takes the icon rule, icon.Size(d). pointsRight selects
 // the "next" direction; otherwise the chevron points "prev". enabled=false
 // dims the glyph to tokens.DisabledOpacity and skips click registration —
 // matching the disabled-control convention used by prism/button.
@@ -231,14 +296,13 @@ func chevronCellWidget(pointsRight bool, click *widget.Clickable, enabled bool, 
 		fg = tokens.Disabled(fg)
 	}
 	return func(gtx layout.Context) layout.Dimensions {
-		cellW := gtx.Dp(unit.Dp(cellWidthDp))
-		cellH := gtx.Dp(unit.Dp(cellHeightDp))
-		sz := gtx.Dp(unit.Dp(chevronSizeDp))
+		side := gtx.Dp(unit.Dp(tok.density.ControlHeight))
+		sz := gtx.Dp(icon.Size(tok.density))
 		cgtx := gtx
-		cgtx.Constraints = layout.Exact(image.Pt(cellW, cellH))
+		cgtx.Constraints = layout.Exact(image.Pt(side, side))
 		draw := func(gtx layout.Context) layout.Dimensions {
-			drawChevron(gtx, cellW/2, cellH/2, sz, fg, pointsRight)
-			return layout.Dimensions{Size: image.Pt(cellW, cellH)}
+			drawChevron(gtx, side/2, side/2, sz, fg, pointsRight)
+			return layout.Dimensions{Size: image.Pt(side, side)}
 		}
 		if click == nil || !enabled {
 			return draw(cgtx)

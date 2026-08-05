@@ -1,6 +1,7 @@
 package pagination_test
 
 import (
+	"context"
 	"flag"
 	"image"
 	"image/color"
@@ -18,7 +19,9 @@ import (
 	"gioui.org/text"
 	"gioui.org/unit"
 
+	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/pagination"
+	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
 
@@ -120,6 +123,44 @@ func TestPaginationLightDarkDiffer(t *testing.T) {
 	if n := pixelDiff(imgLight, imgDark); n == 0 {
 		t.Error("light and dark render identically; expected token-pair colour differences")
 	}
+}
+
+// liveWidget subscribes to obs and returns its last emitted widget.
+func liveWidget(t *testing.T, obs rx.Observable[layout.Widget]) layout.Widget {
+	t.Helper()
+	var w layout.Widget
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
+		if !done && next != nil {
+			w = next
+		}
+	}).Wait(); err != nil {
+		t.Fatalf("Pagination subscribe: %v", err)
+	}
+	if w == nil {
+		t.Fatal("Pagination did not emit an initial widget")
+	}
+	return w
+}
+
+// densityTheme returns a theme whose density is d, with sharp corners
+// for golden determinism — the E1.4 injection idiom, mirroring prism's
+// density tests.
+func densityTheme(d tokens.Density) theme.Theme {
+	th := theme.Default()
+	th.Density = rx.Of(d)
+	th.Radius = rx.Of(tokens.RadiusScale{})
+	return th
+}
+
+// TestPaginationCompactGolden records or diffs the compact-density golden
+// through the LIVE pipeline (the static Render path is frozen at
+// tokens.Comfortable): the page squares densify to the 28 dp
+// ControlHeight and the chevron glyphs to the 16 dp icon size.
+func TestPaginationCompactGolden(t *testing.T) {
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	props := pagination.Props{Page: 3, PageCount: 5, Shaper: defaultShaper(t)}
+	w := liveWidget(t, pagination.Pagination(rx.Of(densityTheme(tokens.Compact)), props))
+	renderGolden(t, "light-compact-page-3-of-5", canvasSize, scene(w, lightBG))
 }
 
 // ---- golden harness (inlined; prism/internal/golden is not importable

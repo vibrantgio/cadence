@@ -9,7 +9,7 @@
 //
 // Note on prism/button: the implementation plan suggested reusing
 // prism/button for tab labels, but a Button renders with a Primary
-// background fill, 6 dp corner radius, and 44 dp minimum height —
+// background fill, 6 dp corner radius, and a control-height minimum —
 // none of which fit a tab strip. The labels here use the same
 // widget.Clickable + custom label rendering pattern as cadence/navbar,
 // which faced the same mismatch.
@@ -63,18 +63,19 @@ type Props struct {
 	Shaper *text.Shaper
 }
 
-// Strip dimensions. The strip height fits a single-line label plus
-// (S3, S2) padding plus the underline; a fixed value keeps the layout
-// deterministic across goldens regardless of label content.
-const (
-	stripHDp    = 40
-	underlineDp = 2
-)
+// Strip dimensions. The strip height is exactly Density.ControlHeight
+// (E1.4) — 36 dp Comfortable, 28 dp Compact — and the tab cells fill it;
+// a density-fixed value keeps the layout deterministic across goldens
+// regardless of label content. Tab cells tile the strip edge to edge, so
+// each cell's hit area stays the cell bounds (extending it to the 44 dp
+// pointer floor would steal the neighbouring tab's slop).
+const underlineDp = 2
 
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	density tokens.Density   // strip height source (E1.4)
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
@@ -92,13 +93,14 @@ func Tabs(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest4(t.Color, t.Spacing, t.Typography, t.Density),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Third
 				return resolvedTokens{
 					color:   n.First,
 					spacing: n.Second,
 					label:   typ.LabelLarge,
+					density: n.Fourth,
 					shaper:  typ.Shaper(),
 				}
 			},
@@ -117,7 +119,7 @@ func Tabs(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 			}
 			return func(gtx layout.Context) layout.Dimensions {
 				processInput(gtx, props, clicks)
-				return drawTabs(gtx, shaper, props, clicks, sel, tok.color, tok.spacing, tok.label)
+				return drawTabs(gtx, shaper, props, clicks, sel, tok.color, tok.spacing, tok.label, tok.density)
 			}
 		})
 	})
@@ -128,7 +130,9 @@ func Tabs(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 // static demonstrations; production code should use Tabs, which takes the
 // shaper and the LabelLarge text style from the theme's Typography. The
 // TypeScale parameter contributes only the LabelLarge size; typeface,
-// weight and line height stay at the shaper's defaults.
+// weight and line height stay at the shaper's defaults. Density is not a
+// parameter (the signature predates E1.4): the static path renders at
+// tokens.Comfortable; density-aware rendering goes through Tabs.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -138,7 +142,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawTabs(gtx, shaper, props, nil, selected, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
+		return drawTabs(gtx, shaper, props, nil, selected, colors, sp, tokens.TextStyle{Size: ts.LabelLarge}, tokens.Comfortable)
 	}
 }
 
@@ -211,11 +215,12 @@ func drawTabs(
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	style tokens.TextStyle,
+	d tokens.Density,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
 	paint.FillShape(gtx.Ops, colors.Surface, clip.Rect{Max: size}.Op())
 
-	stripH := gtx.Dp(unit.Dp(stripHDp))
+	stripH := gtx.Dp(unit.Dp(d.ControlHeight))
 	if stripH > size.Y {
 		stripH = size.Y
 	}

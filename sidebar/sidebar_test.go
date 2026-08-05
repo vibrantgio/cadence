@@ -209,8 +209,10 @@ func TestSidebarArrowTraversalAndEnter(t *testing.T) {
 	driveFrame(w, ops, r, expandedSize)
 	driveFrame(w, ops, r, expandedSize)
 
-	// Click item 0 → fires item 0 and gives it focus.
-	hit := f32.Pt(96, 72)
+	// Click item 0 → fires item 0 and gives it focus. With the E1.4
+	// density pitch (Comfortable ControlHeight = 36) the toggle occupies
+	// y∈[0,36) and item 0 y∈[36,72); (96, 54) lands mid-item-0.
+	hit := f32.Pt(96, 54)
 	r.Queue(
 		pointer.Event{Kind: pointer.Press, Position: hit, Source: pointer.Touch},
 		pointer.Event{Kind: pointer.Release, Position: hit, Source: pointer.Touch},
@@ -249,8 +251,8 @@ func TestSidebarArrowTraversalAndEnter(t *testing.T) {
 // TestSidebarToggleDispatchesOnToggleCollapse verifies that clicking
 // the toggle affordance invokes OnToggleCollapse exactly once. With
 // PxPerDp=1, an expanded sidebar (192 wide) renders its toggle as a
-// 192×48 hit area at the top of the canvas; (96, 24) lands squarely
-// inside.
+// 192×36 hit area (the Comfortable control height, E1.4) at the top of
+// the canvas; (96, 24) lands squarely inside.
 func TestSidebarToggleDispatchesOnToggleCollapse(t *testing.T) {
 	var toggleCount int
 	props := sidebar.Props{
@@ -280,6 +282,31 @@ func TestSidebarToggleDispatchesOnToggleCollapse(t *testing.T) {
 	if toggleCount != 1 {
 		t.Fatalf("OnToggleCollapse fired %d time(s), want 1", toggleCount)
 	}
+}
+
+// densityTheme returns a theme whose density is d, with sharp corners
+// for golden determinism — the E1.4 injection idiom, mirroring prism's
+// density tests.
+func densityTheme(d tokens.Density) theme.Theme {
+	th := theme.Default()
+	th.Density = rx.Of(d)
+	th.Radius = rx.Of(tokens.RadiusScale{})
+	return th
+}
+
+// TestSidebarCompactGolden records or diffs the compact-density golden
+// through the LIVE pipeline (the static Render path is frozen at
+// tokens.Comfortable): the toggle and item pitch drop from 36 to 28 dp.
+func TestSidebarCompactGolden(t *testing.T) {
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	items := make([]sidebar.Item, 3)
+	for i := range items {
+		items[i] = sidebar.Item{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}}
+	}
+	items[1].Active = true
+	props := sidebar.Props{Items: items, Collapsed: rx.Of(false), Shaper: defaultShaper(t)}
+	w := liveWidget(t, sidebar.Sidebar(rx.Of(densityTheme(tokens.Compact)), props))
+	renderGolden(t, "light-compact-expanded", expandedSize, scene(w, lightBG))
 }
 
 // ---- golden harness (inlined; prism/internal/golden is not importable

@@ -39,8 +39,10 @@ func threeColumnObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 		sb = rx.Of[layout.Widget](emptyWidget)
 	}
 	nb := navbar.Navbar(th, props.Navbar)
-	colorObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[tokens.ColorTokens] {
-		return t.Color
+	// Colour and density fold into one snapshot stream so the five-way
+	// CombineLatest keeps room for the widget and width inputs.
+	tokObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[rx.Tuple2[tokens.ColorTokens, tokens.Density]] {
+		return rx.CombineLatest2(t.Color, t.Density)
 	})
 	hasAside := props.Aside != nil
 	aside := props.Aside
@@ -51,11 +53,12 @@ func threeColumnObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 	if widthObs == nil {
 		widthObs = rx.Of(unit.Dp(defaultAsideDp))
 	}
-	inputs := rx.CombineLatest5(colorObs, sb, nb, aside, widthObs)
+	inputs := rx.CombineLatest5(tokObs, sb, nb, aside, widthObs)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
 		ds := &asideDragState{current: defaultAsideDp}
-		return rx.Map(inputs, func(next rx.Tuple5[tokens.ColorTokens, layout.Widget, layout.Widget, layout.Widget, unit.Dp]) layout.Widget {
-			colors, sbW, nbW, asW, wdp := next.First, next.Second, next.Third, next.Fourth, next.Fifth
+		return rx.Map(inputs, func(next rx.Tuple5[rx.Tuple2[tokens.ColorTokens, tokens.Density], layout.Widget, layout.Widget, layout.Widget, unit.Dp]) layout.Widget {
+			tok, sbW, nbW, asW, wdp := next.First, next.Second, next.Third, next.Fourth, next.Fifth
+			colors, navH := tok.First, navbarHeight(tok.Second)
 			ext := clampAsideWidth(wdp)
 			if asW == nil {
 				asW = emptyWidget
@@ -82,7 +85,7 @@ func threeColumnObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 					}
 					processAsideDrag(gtx, ds, onResize)
 				}
-				return drawThreeColumn(gtx, nbW, sbW, main, asW, footer, ds.current, colors, ds, hasAside)
+				return drawThreeColumn(gtx, nbW, sbW, main, asW, footer, ds.current, colors, ds, hasAside, navH)
 			}
 		})
 	})
@@ -107,11 +110,13 @@ func RenderThreeColumn(
 	if sidebarW == nil {
 		sidebarW = emptyWidget
 	}
+	// The static path renders at tokens.Comfortable (the Render signature
+	// predates E1.4); density-aware rendering goes through Shell.
 	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
 	hasAside := asideW != nil
 	w := clampAsideWidth(asideWidth)
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawThreeColumn(gtx, nbW, sidebarW, props.Main, asideW, props.Footer, w, colors, nil, hasAside)
+		return drawThreeColumn(gtx, nbW, sidebarW, props.Main, asideW, props.Footer, w, colors, nil, hasAside, navbarHeight(tokens.Comfortable))
 	}
 }
 
@@ -168,9 +173,10 @@ func drawThreeColumn(
 	colors tokens.ColorTokens,
 	ds *asideDragState, // nil disables the divider hit area (static path)
 	hasAside bool,
+	navbarH unit.Dp,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
-	navH := gtx.Dp(unit.Dp(navbarHDp))
+	navH := gtx.Dp(navbarH)
 	if navH > size.Y {
 		navH = size.Y
 	}

@@ -141,6 +141,45 @@ func TestModalOpenAndClosedDiffer(t *testing.T) {
 	}
 }
 
+// densityTheme returns a theme whose density is d, with sharp corners
+// for golden determinism — the E1.4 injection idiom, mirroring prism's
+// density tests.
+func densityTheme(d tokens.Density) theme.Theme {
+	th := theme.Default()
+	th.Density = rx.Of(d)
+	th.Radius = rx.Of(tokens.RadiusScale{})
+	return th
+}
+
+// TestModalCompactGolden records or diffs the compact-density golden
+// through the LIVE pipeline. The modal itself is a surface — its inset
+// and gaps stay on the spacing scale (E1.4 verdict) — but its close
+// affordance is a live prism/button, which densifies to a 28 dp square
+// through its own theme subscription; that shrinking button is what this
+// golden pins down.
+func TestModalCompactGolden(t *testing.T) {
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
+	obs := modal.Modal(rx.Of(densityTheme(tokens.Compact)), modal.Props{
+		Open:   rx.Of(true),
+		Title:  "",
+		Body:   body,
+		Shaper: defaultShaper(t),
+	})
+	var w layout.Widget
+	if err := obs.Subscribe(context.Background(), func(next layout.Widget, _ error, done bool) {
+		if !done && next != nil {
+			w = next
+		}
+	}).Wait(); err != nil {
+		t.Fatalf("Modal subscribe: %v", err)
+	}
+	if w == nil {
+		t.Fatal("Modal did not emit an initial widget")
+	}
+	renderGolden(t, "light-compact-open", canvasSize, scene(w, lightBG))
+}
+
 // ---- Interaction tests ----
 
 // liveModal subscribes to the Modal observable, drains the trampoline

@@ -91,12 +91,17 @@ type Props[T any] struct {
 	Shaper *text.Shaper
 }
 
-// Layout-affecting constants. Row and header heights are fixed so the
-// body's vertical extent is deterministic and the prism/list viewport
-// can serve constant-time look-aheads.
+// Layout-affecting constants. Row and header heights come from the
+// density (E1.4): both are exactly Density.ControlHeight — the E1.3 row
+// rule (list.RowHeight) — so the body's vertical extent stays
+// deterministic and the prism/list viewport can serve constant-time
+// look-aheads. The header's old fixed 44 dp was the WCAG hit-target
+// floor, not a row height; sortable header cells tile the header band
+// edge to edge (like stacked rows, extending their pointer area would
+// steal a neighbour's slop), so their hit area stays the cell bounds.
+// cellPadDp is the horizontal cell padding — 12 dp, shadcn's px-3 on
+// inputs, which does not follow density (the E1.3 input rule).
 const (
-	headerHDp     = 44
-	rowHDp        = 36
 	cellPadDp     = 12
 	chevronSizeDp = 10
 	dividerDp     = 1
@@ -107,6 +112,7 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	header  tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	density tokens.Density   // row/header height source (E1.4)
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
@@ -129,13 +135,14 @@ func Table[T any](th rx.Observable[theme.Theme], props Props[T]) rx.Observable[l
 	// typeface).
 	tokensObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest4(t.Color, t.Spacing, t.Typography, t.Density),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Third
 				return resolvedTokens{
 					color:   n.First,
 					spacing: n.Second,
 					header:  typ.LabelLarge,
+					density: n.Fourth,
 					shaper:  typ.Shaper(),
 				}
 			},
@@ -167,7 +174,9 @@ func Table[T any](th rx.Observable[theme.Theme], props Props[T]) rx.Observable[l
 // and the LabelLarge header style from the theme's Typography. The TypeScale
 // parameter contributes only the LabelLarge size; the header keeps its
 // legacy bold weight, and typeface and line height stay at the shaper's
-// defaults.
+// defaults. Density is not a parameter (the signature predates E1.4): the
+// static path renders at tokens.Comfortable; density-aware rendering goes
+// through Table.
 func Render[T any](
 	shaper *text.Shaper,
 	columns []Column[T],
@@ -177,7 +186,7 @@ func Render[T any](
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, header: tokens.TextStyle{Size: ts.LabelLarge}}
+	tok := resolvedTokens{color: colors, spacing: sp, header: tokens.TextStyle{Size: ts.LabelLarge}, density: tokens.Comfortable}
 	state := list.NewState()
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawTable(gtx, shaper, columns, items, sk, state, nil, tok)
@@ -221,7 +230,9 @@ func drawTable[T any](
 	paint.FillShape(gtx.Ops, tok.color.Surface, clip.Rect{Max: size}.Op())
 
 	widths := columnWidths(gtx, columns, size.X)
-	headerH := gtx.Dp(unit.Dp(headerHDp))
+	// E1.4 row rule: the header is a row in the grid, so its height is
+	// exactly Density.ControlHeight, like the body rows below it.
+	headerH := gtx.Dp(unit.Dp(tok.density.ControlHeight))
 	if headerH > size.Y {
 		headerH = size.Y
 	}
@@ -423,8 +434,11 @@ func drawHeaderCell[T any](
 
 // drawRow renders one body row by invoking each column's Cell closure
 // inside a fixed-size cell box, then painting the bottom divider line.
-// rowH is computed from rowHDp here, not from the cell's intrinsic size,
-// so per-row layout cost stays bounded regardless of cell content.
+// rowH is the density's row height (list.RowHeight — exactly
+// ControlHeight, the E1.3 row rule), not the cell's intrinsic size, so
+// per-row layout cost stays bounded regardless of cell content. Rows are
+// stacked full-width strips: their hit area stays the row bounds (no
+// 44 dp extension — rows would steal each other's slop).
 func drawRow[T any](
 	gtx layout.Context,
 	columns []Column[T],
@@ -432,7 +446,7 @@ func drawRow[T any](
 	item T,
 	tok resolvedTokens,
 ) layout.Dimensions {
-	rowH := gtx.Dp(unit.Dp(rowHDp))
+	rowH := gtx.Dp(list.RowHeight(tok.density))
 	totalW := gtx.Constraints.Max.X
 	rowSize := image.Pt(totalW, rowH)
 

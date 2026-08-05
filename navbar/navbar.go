@@ -23,7 +23,11 @@
 // bar too narrow for its own contents clips rather than wrapping or
 // collapsing to a menu affordance. The bar also fills the height it is
 // given — it reports gtx.Constraints.Max — so it needs a
-// height-constrained slot; cadence/shell pins it to 64 dp for you.
+// height-constrained slot; cadence/shell pins it to the density's bar
+// height (ControlHeight + 2·PaddingY — 52 dp Comfortable, 40 dp Compact)
+// for you. The bar's own vertical inset is Density.PaddingY, so a
+// ControlHeight action (a prism/button) fills a density-pinned slot
+// exactly; the horizontal inset stays spacing S4.
 package navbar
 
 import (
@@ -84,13 +88,14 @@ func Navbar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wid
 	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest4(t.Color, t.Spacing, t.Typography, t.Density),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Third
 				return resolvedTokens{
 					color:   n.First,
 					spacing: n.Second,
 					label:   typ.LabelLarge,
+					density: n.Fourth,
 					shaper:  typ.Shaper(),
 				}
 			},
@@ -111,7 +116,7 @@ func Navbar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wid
 						props.Links[i].OnClick(gtx)
 					}
 				}
-				return drawNavbar(gtx, shaper, props, clicks, tok.color, tok.spacing, tok.label)
+				return drawNavbar(gtx, shaper, props, clicks, tok.color, tok.spacing, tok.label, tok.density)
 			}
 		})
 	})
@@ -123,6 +128,9 @@ func Navbar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wid
 // takes the shaper and the LabelLarge text style from the theme's
 // Typography. The TypeScale parameter contributes only the LabelLarge
 // size; typeface, weight and line height stay at the shaper's defaults.
+// Density is not a parameter (the signature predates E1.4): the static
+// path renders at tokens.Comfortable; density-aware rendering goes
+// through Navbar.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -131,7 +139,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawNavbar(gtx, shaper, props, nil, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
+		return drawNavbar(gtx, shaper, props, nil, colors, sp, tokens.TextStyle{Size: ts.LabelLarge}, tokens.Comfortable)
 	}
 }
 
@@ -139,21 +147,31 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	density tokens.Density   // bar inset and link padding source (E1.4)
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // underlineDp is the thickness of the Active-link Primary indicator.
 const underlineDp = 2
 
-func drawNavbar(gtx layout.Context, shaper *text.Shaper, props Props, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle) layout.Dimensions {
+func drawNavbar(gtx layout.Context, shaper *text.Shaper, props Props, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle, d tokens.Density) layout.Dimensions {
 	size := gtx.Constraints.Max
 	paint.FillShape(gtx.Ops, colors.Surface, clip.Rect{Max: size}.Op())
 
-	layout.UniformInset(unit.Dp(sp.S4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	// E1.4: the vertical inset is the density's control padding, so a
+	// ControlHeight control in a density-pinned slot (ControlHeight +
+	// 2·PaddingY) fills it exactly; the horizontal inset stays spacing S4.
+	inset := layout.Inset{
+		Top:    unit.Dp(d.PaddingY),
+		Bottom: unit.Dp(d.PaddingY),
+		Left:   unit.Dp(sp.S4),
+		Right:  unit.Dp(sp.S4),
+	}
+	inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(brandSlot(props.Brand)),
 			layout.Flexed(1, emptyWidget),
-			layout.Rigid(linksRow(shaper, props.Links, clicks, colors, sp, style)),
+			layout.Rigid(linksRow(shaper, props.Links, clicks, colors, sp, style, d)),
 			layout.Flexed(1, emptyWidget),
 			layout.Rigid(actionsRow(props.Actions, sp)),
 		)
@@ -177,7 +195,7 @@ func emptyWidget(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{Size: gtx.Constraints.Min}
 }
 
-func linksRow(shaper *text.Shaper, links []Link, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle) layout.Widget {
+func linksRow(shaper *text.Shaper, links []Link, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle, d tokens.Density) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if len(links) == 0 {
 			return layout.Dimensions{}
@@ -187,7 +205,7 @@ func linksRow(shaper *text.Shaper, links []Link, clicks []widget.Clickable, colo
 			if i > 0 {
 				children = append(children, layout.Rigid(pllayout.HSpacer(sp.S2)))
 			}
-			children = append(children, layout.Rigid(linkWidget(shaper, l, clickFor(clicks, i), colors, sp, style)))
+			children = append(children, layout.Rigid(linkWidget(shaper, l, clickFor(clicks, i), colors, sp, style, d)))
 		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 	}
@@ -222,14 +240,18 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 }
 
 // linkWidget renders a single link as a label centred inside
-// (S3, S2) padding. The cell width is at least 2×S3 so the Active
-// underline is visible even when the label rasterises to zero width
-// (e.g., in deterministic empty-label golden tests).
-func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle) layout.Widget {
+// (S3, Density.PaddingY) padding — the horizontal 12 dp stays on the
+// spacing scale (the E1.3 input rule), the vertical padding follows
+// density. The cell width is at least 2×S3 so the Active underline is
+// visible even when the label rasterises to zero width (e.g., in
+// deterministic empty-label golden tests). Links are adjacent cells in
+// a row, so their hit area stays the cell bounds (extension would steal
+// a neighbour's slop).
+func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle, d tokens.Density) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		inner := func(gtx layout.Context) layout.Dimensions {
 			padH := gtx.Dp(unit.Dp(sp.S3))
-			padV := gtx.Dp(unit.Dp(sp.S2))
+			padV := gtx.Dp(unit.Dp(d.PaddingY))
 			underlineH := gtx.Dp(unit.Dp(underlineDp))
 
 			labelGtx := gtx

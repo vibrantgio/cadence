@@ -299,6 +299,34 @@ func TestNavbarLinkClickFiresOnClick(t *testing.T) {
 	}
 }
 
+// densityTheme returns a theme whose density is d, with sharp corners
+// for golden determinism — the E1.4 injection idiom, mirroring prism's
+// density tests.
+func densityTheme(d tokens.Density) theme.Theme {
+	th := theme.Default()
+	th.Density = rx.Of(d)
+	th.Radius = rx.Of(tokens.RadiusScale{})
+	return th
+}
+
+// TestNavbarCompactGolden records or diffs the compact-density golden
+// through the LIVE pipeline (the static Render path is frozen at
+// tokens.Comfortable): the bar's vertical inset and the link padding
+// drop to the Compact PaddingY (6 dp). The canvas is the compact shell
+// pin, ControlHeight + 2·PaddingY = 40 dp.
+func TestNavbarCompactGolden(t *testing.T) {
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	props := navbar.Props{
+		Links: []navbar.Link{
+			{Label: "", Active: true, OnClick: func(_ layout.Context) {}},
+			{Label: "", OnClick: func(_ layout.Context) {}},
+		},
+		Shaper: defaultShaper(t),
+	}
+	w := liveWidget(t, navbar.Navbar(rx.Of(densityTheme(tokens.Compact)), props))
+	renderGolden(t, "light-compact", image.Pt(canvasW, 40), scene(w, lightBG))
+}
+
 // ---- golden harness (inlined; prism/internal/golden is not importable
 // from outside the prism module tree) ----
 
