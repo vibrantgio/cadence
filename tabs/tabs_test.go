@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"gioui.org/f32"
-	"gioui.org/font/gofont"
 	"gioui.org/gpu/headless"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/key"
@@ -26,8 +25,8 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/tabs"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
@@ -40,7 +39,7 @@ var canvasSize = image.Pt(canvasW, canvasH)
 
 func defaultShaper(t *testing.T) *text.Shaper {
 	t.Helper()
-	return text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	return tokens.DefaultTypography.Shaper()
 }
 
 // contentRect returns a layout.Widget that fills its constraints with a

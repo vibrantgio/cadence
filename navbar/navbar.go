@@ -30,7 +30,6 @@ import (
 	"image"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -43,8 +42,8 @@ import (
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Link is one entry in the navbar's link row. OnClick may be nil, in
@@ -66,9 +65,12 @@ type Props struct {
 	Links   []Link
 	Actions []layout.Widget
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
-	// default shaper is created once per subscription inside the
-	// rx.Defer scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the navbar then shapes its link labels
+	// with the theme's shaper (Typography.Shaper()), which is built once
+	// and cached inside the theme's Typography value. Set it only when
+	// this instance must shape with a different shaper than the theme
+	// provides.
 	Shaper *text.Shaper
 }
 
@@ -77,28 +79,39 @@ type Props struct {
 // fire for any Link whose OnClick is non-nil; interaction mirrors the
 // prism/button model (widget.Clickable + semantic ops) per link.
 func Navbar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelLarge text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Type),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, typ: n.Third}
+			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
+			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+				typ := n.Third
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					label:   typ.LabelLarge,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		clicks := make([]widget.Clickable, len(props.Links))
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				for i := range props.Links {
 					if props.Links[i].OnClick != nil && clicks[i].Clicked(gtx) {
 						props.Links[i].OnClick(gtx)
 					}
 				}
-				return drawNavbar(gtx, shaper, props, clicks, tok.color, tok.spacing, tok.typ)
+				return drawNavbar(gtx, shaper, props, clicks, tok.color, tok.spacing, tok.label)
 			}
 		})
 	})
@@ -106,7 +119,10 @@ func Navbar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wid
 
 // Render produces a layout.Widget for a navbar with pre-resolved
 // tokens and no event processing. Intended for golden-image testing
-// and static demonstrations; production code should use Navbar.
+// and static demonstrations; production code should use Navbar, which
+// takes the shaper and the LabelLarge text style from the theme's
+// Typography. The TypeScale parameter contributes only the LabelLarge
+// size; typeface, weight and line height stay at the shaper's defaults.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -115,20 +131,21 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawNavbar(gtx, shaper, props, nil, colors, sp, ts)
+		return drawNavbar(gtx, shaper, props, nil, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
 	}
 }
 
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
-	typ     tokens.TypeScale
+	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // underlineDp is the thickness of the Active-link Primary indicator.
 const underlineDp = 2
 
-func drawNavbar(gtx layout.Context, shaper *text.Shaper, props Props, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, ts tokens.TypeScale) layout.Dimensions {
+func drawNavbar(gtx layout.Context, shaper *text.Shaper, props Props, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle) layout.Dimensions {
 	size := gtx.Constraints.Max
 	paint.FillShape(gtx.Ops, colors.Surface, clip.Rect{Max: size}.Op())
 
@@ -136,7 +153,7 @@ func drawNavbar(gtx layout.Context, shaper *text.Shaper, props Props, clicks []w
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(brandSlot(props.Brand)),
 			layout.Flexed(1, emptyWidget),
-			layout.Rigid(linksRow(shaper, props.Links, clicks, colors, sp, ts)),
+			layout.Rigid(linksRow(shaper, props.Links, clicks, colors, sp, style)),
 			layout.Flexed(1, emptyWidget),
 			layout.Rigid(actionsRow(props.Actions, sp)),
 		)
@@ -160,7 +177,7 @@ func emptyWidget(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{Size: gtx.Constraints.Min}
 }
 
-func linksRow(shaper *text.Shaper, links []Link, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, ts tokens.TypeScale) layout.Widget {
+func linksRow(shaper *text.Shaper, links []Link, clicks []widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if len(links) == 0 {
 			return layout.Dimensions{}
@@ -170,7 +187,7 @@ func linksRow(shaper *text.Shaper, links []Link, clicks []widget.Clickable, colo
 			if i > 0 {
 				children = append(children, layout.Rigid(pllayout.HSpacer(sp.S2)))
 			}
-			children = append(children, layout.Rigid(linkWidget(shaper, l, clickFor(clicks, i), colors, sp, ts)))
+			children = append(children, layout.Rigid(linkWidget(shaper, l, clickFor(clicks, i), colors, sp, style)))
 		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
 	}
@@ -208,7 +225,7 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 // (S3, S2) padding. The cell width is at least 2×S3 so the Active
 // underline is visible even when the label rasterises to zero width
 // (e.g., in deterministic empty-label golden tests).
-func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, ts tokens.TypeScale) layout.Widget {
+func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		inner := func(gtx layout.Context) layout.Dimensions {
 			padH := gtx.Dp(unit.Dp(sp.S3))
@@ -226,9 +243,20 @@ func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tok
 			paint.ColorOp{Color: colors.OnSurface}.Add(gtx.Ops)
 			textMaterial := mColor.Stop()
 
-			mLabel := op.Record(gtx.Ops)
+			// Shape with the LabelLarge role's typeface, weight, size and
+			// line height. Zero fields (the legacy Render path synthesizes
+			// a size-only style) fall back to the shaper's defaults.
+			f := font.Font{Typeface: font.Typeface(style.Typeface)}
+			if style.Weight != 0 {
+				f.Weight = tokens.FontWeight(style.Weight)
+			}
 			wl := widget.Label{MaxLines: 1}
-			labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(ts.LabelLarge), l.Label, textMaterial)
+			if style.LineHeight != 0 {
+				wl.LineHeight = unit.Sp(style.LineHeight)
+				wl.LineHeightScale = 1
+			}
+			mLabel := op.Record(gtx.Ops)
+			labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), l.Label, textMaterial)
 			labelCall := mLabel.Stop()
 
 			cellW := labelDims.Size.X + 2*padH

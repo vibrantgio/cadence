@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"gioui.org/f32"
-	"gioui.org/font/gofont"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
@@ -17,8 +16,8 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/table"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Body height fits ~9 rows of 36 px, so the visible-row bound used by
@@ -30,7 +29,7 @@ const (
 
 func defaultShaper(t *testing.T) *text.Shaper {
 	t.Helper()
-	return text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
+	return tokens.DefaultTypography.Shaper()
 }
 
 func liveWidget(t *testing.T, obs rx.Observable[layout.Widget]) layout.Widget {

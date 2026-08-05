@@ -25,7 +25,6 @@ import (
 
 	"gioui.org/f32"
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -38,8 +37,8 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/list"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Column declares one column of a Table. Cell is invoked once per visible
@@ -83,9 +82,12 @@ type Props[T any] struct {
 	// the clicked column and re-emits Sort and a re-sorted Items slice.
 	OnSort func(gtx layout.Context, col int)
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. Created
-	// once per subscription inside the rx.Defer scope so it survives
-	// theme emissions for the lifetime of the Table instance.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the table then shapes its header labels
+	// with the theme's shaper (Typography.Shaper()), which is built once
+	// and cached inside the theme's Typography value. Set it only when
+	// this table must shape with a different shaper than the theme
+	// provides.
 	Shaper *text.Shaper
 }
 
@@ -104,7 +106,8 @@ const (
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
-	typ     tokens.TypeScale
+	header  tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Table returns an rx.Observable[layout.Widget] that emits a new widget
@@ -120,24 +123,36 @@ func Table[T any](th rx.Observable[theme.Theme], props Props[T]) rx.Observable[l
 	if sort == nil {
 		sort = rx.Of(Sort{Column: -1})
 	}
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelLarge text style for the
+	// header and the theme's cached shaper (ADR-003: the theme owns the
+	// typeface).
 	tokensObs := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Type),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, typ: n.Third}
+			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
+			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+				typ := n.Third
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					header:  typ.LabelLarge,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	inputs := rx.CombineLatest3(tokensObs, items, sort)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		state := list.NewState()
 		clicks := make([]widget.Clickable, len(props.Columns))
 		return rx.Map(inputs, func(n rx.Tuple3[resolvedTokens, []T, Sort]) layout.Widget {
 			tok, rows, sk := n.First, n.Second, n.Third
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				processHeaderClicks(gtx, props.Columns, clicks, props.OnSort)
 				return drawTable(gtx, shaper, props.Columns, rows, sk, state, clicks, tok)
@@ -148,7 +163,11 @@ func Table[T any](th rx.Observable[theme.Theme], props Props[T]) rx.Observable[l
 
 // Render produces a layout.Widget for a table with a fixed dataset and
 // pre-resolved tokens. Intended for golden-image testing and static
-// demonstrations; production code should use Table.
+// demonstrations; production code should use Table, which takes the shaper
+// and the LabelLarge header style from the theme's Typography. The TypeScale
+// parameter contributes only the LabelLarge size; the header keeps its
+// legacy bold weight, and typeface and line height stay at the shaper's
+// defaults.
 func Render[T any](
 	shaper *text.Shaper,
 	columns []Column[T],
@@ -158,7 +177,7 @@ func Render[T any](
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, typ: ts}
+	tok := resolvedTokens{color: colors, spacing: sp, header: tokens.TextStyle{Size: ts.LabelLarge}}
 	state := list.NewState()
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawTable(gtx, shaper, columns, items, sk, state, nil, tok)
@@ -347,13 +366,25 @@ func drawHeaderCell[T any](
 			paint.ColorOp{Color: tok.color.OnSurfaceVariant}.Add(gtx.Ops)
 			material := mColor.Stop()
 
-			mLabel := op.Record(gtx.Ops)
+			// Shape with the LabelLarge role's typeface, weight, size and
+			// line height. A zero Weight (the legacy Render path synthesizes
+			// a size-only style) keeps the header's legacy bold weight.
+			style := tok.header
+			f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: font.Bold}
+			if style.Weight != 0 {
+				f.Weight = tokens.FontWeight(style.Weight)
+			}
 			wl := widget.Label{MaxLines: 1}
+			if style.LineHeight != 0 {
+				wl.LineHeight = unit.Sp(style.LineHeight)
+				wl.LineHeightScale = 1
+			}
+			mLabel := op.Record(gtx.Ops)
 			labelDims := wl.Layout(
 				labelGtx,
 				shaper,
-				font.Font{Weight: font.Bold},
-				unit.Sp(tok.typ.LabelLarge),
+				f,
+				unit.Sp(style.Size),
 				col.Header,
 				material,
 			)
@@ -437,7 +468,9 @@ func drawRow[T any](
 // RenderTextCell renders a single line of OnSurface-coloured text within
 // the cell's allocated rectangle, with horizontal padding equal to
 // cellPadDp. Exported so consumers building their own Cell closures can
-// match the table's stock text style.
+// match the table's stock text style. The TypeScale parameter contributes
+// only the BodyMedium size; typeface, weight and line height stay at the
+// shaper's defaults.
 func RenderTextCell(
 	shaper *text.Shaper,
 	colors tokens.ColorTokens,

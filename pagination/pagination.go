@@ -20,7 +20,6 @@ import (
 	"strconv"
 
 	"gioui.org/f32"
-	"gioui.org/font/gofont"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
@@ -33,8 +32,8 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/button"
 	pllayout "github.com/vibrantgio/prism/layout"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Props configures a Pagination instance. Page is 1-indexed; values outside
@@ -45,9 +44,12 @@ type Props struct {
 	PageCount int
 	OnSelect  func(gtx layout.Context, page int)
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. Created once
-	// per subscription inside the rx.Defer scope so it survives theme
-	// emissions for the lifetime of the Pagination instance.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the pagination then shapes its page
+	// digits with the theme's shaper (Typography.Shaper()), which is
+	// built once and cached inside the theme's Typography value. Set it
+	// only when this instance must shape with a different shaper than
+	// the theme provides.
 	Shaper *text.Shaper
 }
 
@@ -57,20 +59,26 @@ type Props struct {
 // numbered page button; in all cases OnSelect receives the resulting page
 // number (1-indexed).
 func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelLarge text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Type),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, radius: n.Third, typ: n.Fourth}
+			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
+			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+				typ := n.Fourth
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					radius:  n.Third,
+					label:   typ.LabelLarge,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		var prevClick, nextClick widget.Clickable
 		n := props.PageCount
 		if n < 0 {
@@ -79,6 +87,12 @@ func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 		pageClicks := make([]widget.Clickable, n)
 
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				if props.OnSelect != nil {
 					if props.Page > 1 && prevClick.Clicked(gtx) {
@@ -101,7 +115,10 @@ func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 
 // Render produces a layout.Widget for a pagination row with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Pagination.
+// production code should use Pagination, which takes the shaper and the
+// LabelLarge text style from the theme's Typography. The TypeScale
+// parameter contributes only the LabelLarge size; typeface, weight and
+// line height stay at the shaper's defaults.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -110,7 +127,7 @@ func Render(
 	rad tokens.RadiusScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, typ: ts}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, label: tokens.TextStyle{Size: ts.LabelLarge}}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawPagination(gtx, shaper, props, nil, nil, nil, tok)
 	}
@@ -120,7 +137,8 @@ type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
 	radius  tokens.RadiusScale
-	typ     tokens.TypeScale
+	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 const (
@@ -168,6 +186,12 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 // tokens are used; for other pages a copy of the colour set substitutes
 // SurfaceVariant/OnSurfaceVariant so they remain visually distinct from
 // both the active page and the surrounding surface.
+//
+// button.Render is the static bridge, and its TypeScale parameter carries
+// only a size — so the LabelLarge role contributes its Size here while
+// typeface and weight resolve through the shaper (the theme's Typography
+// shaper in the Pagination path). The full role style flows through only
+// once prism/button grows a TextStyle-based static renderer.
 func pageCellWidget(shaper *text.Shaper, n int, current bool, click *widget.Clickable, tok resolvedTokens) layout.Widget {
 	pageColors := tok.color
 	if !current {
@@ -175,7 +199,8 @@ func pageCellWidget(shaper *text.Shaper, n int, current bool, click *widget.Clic
 		pageColors.OnPrimary = tok.color.OnSurfaceVariant
 	}
 	label := strconv.Itoa(n)
-	rendered := button.Render(shaper, label, pageColors, tok.spacing, tok.radius, tok.typ, button.RenderState{})
+	rendered := button.Render(shaper, label, pageColors, tok.spacing, tok.radius,
+		tokens.TypeScale{LabelLarge: tok.label.Size}, button.RenderState{})
 
 	return func(gtx layout.Context) layout.Dimensions {
 		cellW := gtx.Dp(unit.Dp(cellWidthDp))

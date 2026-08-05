@@ -19,7 +19,6 @@ import (
 	"image"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 	"gioui.org/io/semantic"
@@ -32,8 +31,8 @@ import (
 	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Tab is one entry in the tab strip. Content may be nil; a nil content
@@ -56,9 +55,11 @@ type Props struct {
 	// Arrow-Left/Right (wrapping), Home, or End. May be nil.
 	OnSelect func(gtx layout.Context, idx int)
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
-	// default shaper is created once per subscription inside the
-	// rx.Defer scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the tabs then shape their labels with
+	// the theme's shaper (Typography.Shaper()), which is built once and
+	// cached inside the theme's Typography value. Set it only when this
+	// instance must shape with a different shaper than the theme provides.
 	Shaper *text.Shaper
 }
 
@@ -73,7 +74,8 @@ const (
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
-	typ     tokens.TypeScale
+	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Tabs returns an rx.Observable[layout.Widget] that emits a new widget
@@ -85,26 +87,37 @@ func Tabs(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 	if selected == nil {
 		selected = rx.Of(0)
 	}
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelLarge text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Type),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, typ: n.Third}
+			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
+			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+				typ := n.Third
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					label:   typ.LabelLarge,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	inputs := rx.CombineLatest2(resolved, selected)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		clicks := make([]widget.Clickable, len(props.Tabs))
 		return rx.Map(inputs, func(next rx.Tuple2[resolvedTokens, int]) layout.Widget {
 			tok, sel := next.First, next.Second
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				processInput(gtx, props, clicks)
-				return drawTabs(gtx, shaper, props, clicks, sel, tok.color, tok.spacing, tok.typ)
+				return drawTabs(gtx, shaper, props, clicks, sel, tok.color, tok.spacing, tok.label)
 			}
 		})
 	})
@@ -112,7 +125,10 @@ func Tabs(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 
 // Render produces a layout.Widget for a tabs view with a fixed selected
 // index and no event processing. Intended for golden-image testing and
-// static demonstrations; production code should use Tabs.
+// static demonstrations; production code should use Tabs, which takes the
+// shaper and the LabelLarge text style from the theme's Typography. The
+// TypeScale parameter contributes only the LabelLarge size; typeface,
+// weight and line height stay at the shaper's defaults.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -122,7 +138,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawTabs(gtx, shaper, props, nil, selected, colors, sp, ts)
+		return drawTabs(gtx, shaper, props, nil, selected, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
 	}
 }
 
@@ -194,7 +210,7 @@ func drawTabs(
 	selected int,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	style tokens.TextStyle,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
 	paint.FillShape(gtx.Ops, colors.Surface, clip.Rect{Max: size}.Op())
@@ -206,7 +222,7 @@ func drawTabs(
 
 	stripGtx := gtx
 	stripGtx.Constraints = layout.Exact(image.Pt(size.X, stripH))
-	drawStrip(stripGtx, shaper, props, clicks, selected, colors, sp, ts)
+	drawStrip(stripGtx, shaper, props, clicks, selected, colors, sp, style)
 
 	if size.Y > stripH && selected >= 0 && selected < len(props.Tabs) && props.Tabs[selected].Content != nil {
 		panelSize := image.Pt(size.X, size.Y-stripH)
@@ -228,7 +244,7 @@ func drawStrip(
 	selected int,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	style tokens.TextStyle,
 ) layout.Dimensions {
 	if len(props.Tabs) == 0 {
 		return layout.Dimensions{Size: gtx.Constraints.Max}
@@ -238,7 +254,7 @@ func drawStrip(
 		i := i
 		children = append(children, layout.Rigid(tabCell(
 			shaper, props.Tabs[i].Label, clickFor(clicks, i), i == selected,
-			colors, sp, ts,
+			colors, sp, style,
 		)))
 	}
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Start}.Layout(gtx, children...)
@@ -264,7 +280,7 @@ func tabCell(
 	selected bool,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	style tokens.TextStyle,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		stripH := gtx.Constraints.Max.Y
@@ -283,9 +299,20 @@ func tabCell(
 			paint.ColorOp{Color: colors.OnSurface}.Add(gtx.Ops)
 			textMaterial := mColor.Stop()
 
-			mLabel := op.Record(gtx.Ops)
+			// Shape with the LabelLarge role's typeface, weight, size and
+			// line height. Zero fields (the legacy Render path synthesizes
+			// a size-only style) fall back to the shaper's defaults.
+			f := font.Font{Typeface: font.Typeface(style.Typeface)}
+			if style.Weight != 0 {
+				f.Weight = tokens.FontWeight(style.Weight)
+			}
 			wl := widget.Label{MaxLines: 1}
-			labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(ts.LabelLarge), label, textMaterial)
+			if style.LineHeight != 0 {
+				wl.LineHeight = unit.Sp(style.LineHeight)
+				wl.LineHeightScale = 1
+			}
+			mLabel := op.Record(gtx.Ops)
+			labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), label, textMaterial)
 			labelCall := mLabel.Stop()
 
 			cellW := labelDims.Size.X + 2*padH

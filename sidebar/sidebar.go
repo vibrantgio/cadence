@@ -34,7 +34,6 @@ import (
 	"image/color"
 
 	"gioui.org/font"
-	"gioui.org/font/gofont"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
@@ -48,8 +47,8 @@ import (
 	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
-	"github.com/vibrantgio/prism/theme"
-	"github.com/vibrantgio/prism/tokens"
+	"github.com/vibrantgio/spectrum/theme"
+	"github.com/vibrantgio/spectrum/tokens"
 )
 
 // Item is one entry in the sidebar's list. OnClick may be nil, in which
@@ -75,9 +74,12 @@ type Props struct {
 	// May be nil.
 	OnToggleCollapse func(gtx layout.Context)
 
-	// Shaper, if nil, defaults to a shaper backed by Go fonts. The
-	// default shaper is created once per subscription inside the
-	// rx.Defer scope, so it is not re-allocated on every theme change.
+	// Shaper is an explicit per-instance override of the text shaper.
+	// Leave it nil in normal use: the sidebar then shapes its item labels
+	// with the theme's shaper (Typography.Shaper()), which is built once
+	// and cached inside the theme's Typography value. Set it only when
+	// this instance must shape with a different shaper than the theme
+	// provides.
 	Shaper *text.Shaper
 }
 
@@ -95,7 +97,8 @@ const (
 type resolvedTokens struct {
 	color   tokens.ColorTokens
 	spacing tokens.SpacingScale
-	typ     tokens.TypeScale
+	label   tokens.TextStyle // the LabelLarge role: typeface, weight, size, line height
+	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
 // Sidebar returns an rx.Observable[layout.Widget] that emits a new
@@ -109,27 +112,38 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	if collapsed == nil {
 		collapsed = rx.Of(false)
 	}
+	// Flatten the nested theme observables into a concrete snapshot. The
+	// typography emission supplies both the LabelLarge text style and the
+	// theme's cached shaper (ADR-003: the theme owns the typeface).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest3(t.Color, t.Spacing, t.Type),
-			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.TypeScale]) resolvedTokens {
-				return resolvedTokens{color: n.First, spacing: n.Second, typ: n.Third}
+			rx.CombineLatest3(t.Color, t.Spacing, t.Typography),
+			func(n rx.Tuple3[tokens.ColorTokens, tokens.SpacingScale, tokens.Typography]) resolvedTokens {
+				typ := n.Third
+				return resolvedTokens{
+					color:   n.First,
+					spacing: n.Second,
+					label:   typ.LabelLarge,
+					shaper:  typ.Shaper(),
+				}
 			},
 		)
 	})
 	inputs := rx.CombineLatest2(resolved, collapsed)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
-		shaper := props.Shaper
-		if shaper == nil {
-			shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(gofont.Collection()))
-		}
 		clicks := make([]widget.Clickable, len(props.Items))
 		var toggleTag toggleTag
 		return rx.Map(inputs, func(next rx.Tuple2[resolvedTokens, bool]) layout.Widget {
 			tok, col := next.First, next.Second
+			// Props.Shaper is an explicit override; the theme's shaper is
+			// the default.
+			shaper := props.Shaper
+			if shaper == nil {
+				shaper = tok.shaper
+			}
 			return func(gtx layout.Context) layout.Dimensions {
 				processInput(gtx, props, clicks, &toggleTag)
-				return drawSidebar(gtx, shaper, props, clicks, &toggleTag, col, tok.color, tok.spacing, tok.typ)
+				return drawSidebar(gtx, shaper, props, clicks, &toggleTag, col, tok.color, tok.spacing, tok.label)
 			}
 		})
 	})
@@ -138,7 +152,10 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 // Render produces a layout.Widget for a sidebar with pre-resolved
 // tokens, an explicit collapsed flag, and no event processing.
 // Intended for golden-image testing and static demonstrations;
-// production code should use Sidebar.
+// production code should use Sidebar, which takes the shaper and the
+// LabelLarge text style from the theme's Typography. The TypeScale
+// parameter contributes only the LabelLarge size; typeface, weight and
+// line height stay at the shaper's defaults.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -148,7 +165,7 @@ func Render(
 	ts tokens.TypeScale,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawSidebar(gtx, shaper, props, nil, nil, collapsed, colors, sp, ts)
+		return drawSidebar(gtx, shaper, props, nil, nil, collapsed, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
 	}
 }
 
@@ -223,7 +240,7 @@ func drawSidebar(
 	collapsed bool,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	style tokens.TextStyle,
 ) layout.Dimensions {
 	widthDp := float32(expandedDp)
 	if collapsed {
@@ -244,7 +261,7 @@ func drawSidebar(
 	for i, it := range props.Items {
 		off := image.Pt(0, toggleH+i*itemH)
 		stk := op.Offset(off).Push(gtx.Ops)
-		drawItem(gtx, shaper, it, clickFor(clicks, i), image.Pt(w, itemH), collapsed, colors, sp, ts)
+		drawItem(gtx, shaper, it, clickFor(clicks, i), image.Pt(w, itemH), collapsed, colors, sp, style)
 		stk.Pop()
 	}
 
@@ -287,7 +304,7 @@ func drawItem(
 	collapsed bool,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	style tokens.TextStyle,
 ) layout.Dimensions {
 	inner := func(gtx layout.Context) layout.Dimensions {
 		if item.Active {
@@ -338,9 +355,21 @@ func drawItem(
 				labelGtx.Constraints.Max.X = labelMaxW
 				labelGtx.Constraints.Max.Y = size.Y
 
-				mLabel := op.Record(gtx.Ops)
+				// Shape with the LabelLarge role's typeface, weight, size
+				// and line height. Zero fields (the legacy Render path
+				// synthesizes a size-only style) fall back to the shaper's
+				// defaults.
+				f := font.Font{Typeface: font.Typeface(style.Typeface)}
+				if style.Weight != 0 {
+					f.Weight = tokens.FontWeight(style.Weight)
+				}
 				wl := widget.Label{MaxLines: 1}
-				labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(ts.LabelLarge), item.Label, textMaterial)
+				if style.LineHeight != 0 {
+					wl.LineHeight = unit.Sp(style.LineHeight)
+					wl.LineHeightScale = 1
+				}
+				mLabel := op.Record(gtx.Ops)
+				labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), item.Label, textMaterial)
 				labelCall := mLabel.Stop()
 
 				offY := (size.Y - labelDims.Size.Y) / 2
