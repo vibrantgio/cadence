@@ -1,0 +1,38 @@
+# Minimal build-and-test CI, added by B3.5 so the ADR-001 layer check has
+# somewhere to run.
+#
+# The layer check fetches scripts/check-layers.sh from the vibrantgio/.github
+# repo, which owns the tier table — this repo carries no copy, so the table
+# cannot drift per repo.
+#
+# ADR-006 tag seam: with no workspace in CI, sibling vibrantgio modules
+# resolve from the module proxy at published tags. Until the post-refactor
+# tags are pushed, this workflow may be red on a fresh clone-and-build; that
+# is expected and clears with the next tag push.
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Gio system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc pkg-config libwayland-dev libx11-dev \
+            libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+      - run: go build ./...
+      - run: go test ./...
+      - name: Layer check (ADR-001)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/vibrantgio/.github/master/scripts/check-layers.sh \
+            -o "$RUNNER_TEMP/check-layers.sh"
+          bash "$RUNNER_TEMP/check-layers.sh" .
