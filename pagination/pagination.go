@@ -1,8 +1,8 @@
 // Package pagination provides the Cadence Pagination pattern: a horizontal
 // row of numbered page buttons flanked by prev/next chevrons. The current
 // page button is highlighted via Primary/OnPrimary; the other page buttons
-// reuse prism/button with the SurfaceVariant/OnSurfaceVariant pair so they
-// remain visually distinct from the active page.
+// reuse prism/button with a neutral tinted-fill pair (neutral 300 fill,
+// neutral 700 label) so they remain visually distinct from the active page.
 //
 // The package follows the Phase 4 Composition contract: Pagination is a
 // callable Go function consuming a Prism theme observable, returning a
@@ -183,9 +183,10 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 
 // pageCellWidget returns a fixed-width clickable cell rendering page n via
 // prism/button.Render. For the current page the real Primary/OnPrimary
-// tokens are used; for other pages a copy of the colour set substitutes
-// SurfaceVariant/OnSurfaceVariant so they remain visually distinct from
-// both the active page and the surrounding surface.
+// tokens are used; for other pages a copy of the colour set substitutes a
+// neutral tinted fill (step 300) with low-contrast text (step 700) so they
+// remain visually distinct from both the active page and the surrounding
+// surface.
 //
 // button.Render is the static bridge, and its TypeScale parameter carries
 // only a size — so the LabelLarge role contributes its Size here while
@@ -195,8 +196,8 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 func pageCellWidget(shaper *text.Shaper, n int, current bool, click *widget.Clickable, tok resolvedTokens) layout.Widget {
 	pageColors := tok.color
 	if !current {
-		pageColors.Primary = tok.color.SurfaceVariant
-		pageColors.OnPrimary = tok.color.OnSurfaceVariant
+		pageColors.Primary = tok.color.Ramps.Neutral.Step(300)
+		pageColors.OnPrimary = tok.color.Ramps.Neutral.Step(700)
 	}
 	label := strconv.Itoa(n)
 	rendered := button.Render(shaper, label, pageColors, tok.spacing, tok.radius,
@@ -222,12 +223,12 @@ func pageCellWidget(shaper *text.Shaper, n int, current bool, click *widget.Clic
 
 // chevronCellWidget renders a fixed-size chevron cell. pointsRight selects
 // the "next" direction; otherwise the chevron points "prev". enabled=false
-// dims the glyph to 38% alpha and skips click registration — matching the
-// disabled-control convention used by prism/button.
+// dims the glyph to tokens.DisabledOpacity and skips click registration —
+// matching the disabled-control convention used by prism/button.
 func chevronCellWidget(pointsRight bool, click *widget.Clickable, enabled bool, tok resolvedTokens) layout.Widget {
-	fg := tok.color.OnSurface
+	fg := tok.color.Text
 	if !enabled {
-		fg = withAlpha(fg, 0x61)
+		fg = tokens.Disabled(fg)
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		cellW := gtx.Dp(unit.Dp(cellWidthDp))
@@ -272,9 +273,4 @@ func drawChevron(gtx layout.Context, cx, cy, sz int, col color.NRGBA, pointsRigh
 	}
 	p.Close()
 	paint.FillShape(gtx.Ops, col, clip.Outline{Path: p.End()}.Op())
-}
-
-func withAlpha(c color.NRGBA, a uint8) color.NRGBA {
-	c.A = uint8(uint16(c.A) * uint16(a) / 255)
-	return c
 }

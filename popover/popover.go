@@ -270,7 +270,7 @@ func drawPopover(
 			SE:   r, SW: r, NE: r, NW: r,
 		}
 		paint.FillShape(gtx.Ops, tok.color.Surface, surfRRect.Op(gtx.Ops))
-		paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{
+		paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{
 			Path:  surfRRect.Path(gtx.Ops),
 			Width: float32(gtx.Dp(unit.Dp(1))),
 		}.Op())

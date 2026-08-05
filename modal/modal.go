@@ -324,7 +324,7 @@ func drawModal(
 	off := op.Offset(surfPos).Push(gtx.Ops)
 	surfRRect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(surfW, surfH)}, SE: r, SW: r, NE: r, NW: r}
 	paint.FillShape(gtx.Ops, tok.color.Surface, surfRRect.Op(gtx.Ops))
-	paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{
+	paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{
 		Path:  surfRRect.Path(gtx.Ops),
 		Width: float32(gtx.Dp(unit.Dp(1))),
 	}.Op())
@@ -392,7 +392,7 @@ func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, closeWid
 				return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
 			}
 			mColor := op.Record(gtx.Ops)
-			paint.ColorOp{Color: tok.color.OnSurface}.Add(gtx.Ops)
+			paint.ColorOp{Color: tok.color.Text}.Add(gtx.Ops)
 			material := mColor.Stop()
 			// Shape with the TitleMedium role's typeface, weight, size and
 			// line height. The legacy Render path synthesizes a size-only

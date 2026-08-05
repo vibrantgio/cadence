@@ -11,8 +11,8 @@
 // equal-width cells (the last row pads with empty cells), separated by an
 // S5 gap horizontally between cells and vertically between rows. Each cell
 // stacks (top to bottom) an optional icon sized to an S8 × S8 square, the
-// Title in title-medium typography in OnSurface, and the Body in
-// body-medium typography in OnSurfaceVariant.
+// Title in title-medium typography in Text, and the Body in body-medium
+// typography in the low-contrast neutral-700 step.
 //
 // The Icon slot is opaque — callers supply any layout.Widget. No
 // responsive collapse from `Columns` to a smaller column count on narrow
@@ -47,10 +47,10 @@ type Item struct {
 	// sized to an S8 × S8 square. nil omits the icon row entirely.
 	Icon layout.Widget
 
-	// Title is rendered in title-medium typography in OnSurface.
+	// Title is rendered in title-medium typography in Text.
 	Title string
 
-	// Body is rendered in body-medium typography in OnSurfaceVariant.
+	// Body is rendered in body-medium typography in neutral 700.
 	Body string
 }
 
@@ -240,16 +240,17 @@ func iconCellWidget(icon layout.Widget, tok resolvedTokens) layout.Widget {
 	}
 }
 
-// titleWidget renders the title in the TitleMedium role in OnSurface. A
+// titleWidget renders the title in the TitleMedium role in Text. A
 // zero style weight (the legacy Render path synthesizes a size-only
 // style) falls back to SemiBold, matching the pre-Typography rendering.
 func titleWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurface, tok.title, font.SemiBold)
+	return textWidget(shaper, label, tok.color.Text, tok.title, font.SemiBold)
 }
 
-// bodyWidget renders the body in the BodyMedium role in OnSurfaceVariant.
+// bodyWidget renders the body in the BodyMedium role in the low-contrast
+// text step (neutral 700).
 func bodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurfaceVariant, tok.body, font.Normal)
+	return textWidget(shaper, label, tok.color.Ramps.Neutral.Step(700), tok.body, font.Normal)
 }
 
 // textWidget renders a wrapped widget.Label in the supplied colour and

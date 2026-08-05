@@ -11,7 +11,7 @@
 // Only Info and Error read a token role — Primary and Error. Success and
 // Warning have no role in the token set yet, so they fall back to Tailwind
 // green and amber shades defined in this file, chosen between light and
-// dark by comparing the luminance of Surface against OnSurface. A custom
+// dark by comparing the luminance of Surface against Text. A custom
 // theme's colours therefore reach two of the four variants and not the
 // other two. And all four draw the same right-pointing chevron glyph,
 // differing only in colour; the per-variant icon set arrives with
@@ -171,7 +171,7 @@ func contentColumn(shaper *text.Shaper, props Props, colors tokens.ColorTokens, 
 	return func(gtx layout.Context) layout.Dimensions {
 		var ws []layout.Widget
 		if props.Title != "" {
-			ws = append(ws, titleWidget(shaper, props.Title, colors.OnSurface, title))
+			ws = append(ws, titleWidget(shaper, props.Title, colors.Text, title))
 		}
 		if props.Body != nil {
 			if len(ws) > 0 {
@@ -251,7 +251,7 @@ var (
 )
 
 // localAccent picks the light- or dark-mode shade based on the relative
-// luminance of Surface vs OnSurface in the active token set.
+// luminance of Surface vs Text in the active token set.
 func localAccent(c tokens.ColorTokens, lightShade, darkShade color.NRGBA) color.NRGBA {
 	if isLightMode(c) {
 		return lightShade
@@ -260,7 +260,7 @@ func localAccent(c tokens.ColorTokens, lightShade, darkShade color.NRGBA) color.
 }
 
 func isLightMode(c tokens.ColorTokens) bool {
-	return luminance(c.Surface) > luminance(c.OnSurface)
+	return luminance(c.Surface) > luminance(c.Text)
 }
 
 func luminance(c color.NRGBA) int {
@@ -268,7 +268,7 @@ func luminance(c color.NRGBA) int {
 }
 
 // tintSurface overlays accent onto surface at ~12% alpha. The result has
-// a soft variant tint while preserving OnSurface text legibility.
+// a soft variant tint while preserving Text legibility.
 func tintSurface(surface, accent color.NRGBA) color.NRGBA {
 	return blend(surface, accent, 0x1F)
 }

@@ -390,12 +390,13 @@ func paintStack(
 }
 
 // paintToast paints one elevated, tinted row sized to its content: a
-// Level3 cast shadow under a SurfaceVariant fill tinted 20% with the
-// level accent, ringed by a 1dp accent outline. The Surface-based 12%
-// tint this replaces sat at ~1.2:1 against Surface-painted panes (and
-// 1.01:1 against SurfaceVariant ones in dark themes) — the toast only
-// read as a shape because of its outline. The fade alpha is applied to
-// the shadow (via PushOpacity), the fill, and the text colour.
+// Level3 cast shadow under a neutral step-300 fill tinted 20% with the
+// level accent, ringed by a 1dp accent outline. The step-300 base sits
+// one step past the Surface ground so the fill itself separates from
+// Surface-painted panes; the Surface-based 12% tint it replaced sat at
+// ~1.2:1 against them — the toast only read as a shape because of its
+// outline. The fade alpha is applied to the shadow (via PushOpacity),
+// the fill, and the text colour.
 func paintToast(
 	gtx layout.Context,
 	shaper *text.Shaper,
@@ -410,9 +411,9 @@ func paintToast(
 	alpha := fadeAlpha(it, lifetime, now)
 
 	accent := accentColor(it.toast.Level, tok.color)
-	fill := withAlpha(tintSurface(tok.color.SurfaceVariant, accent), alpha)
+	fill := withAlpha(tintSurface(tok.color.Ramps.Neutral.Step(300), accent), alpha)
 	outline := withAlpha(accent, alpha)
-	fg := withAlpha(tok.color.OnSurface, alpha)
+	fg := withAlpha(tok.color.Text, alpha)
 
 	// Pre-record the label so we can size the surface around its dims.
 	mColor := op.Record(gtx.Ops)
@@ -521,7 +522,7 @@ var (
 )
 
 func localAccent(c tokens.ColorTokens, lightShade, darkShade color.NRGBA) color.NRGBA {
-	if luminance(c.Surface) > luminance(c.OnSurface) {
+	if luminance(c.Surface) > luminance(c.Text) {
 		return lightShade
 	}
 	return darkShade
@@ -531,7 +532,7 @@ func luminance(c color.NRGBA) int { return int(c.R) + int(c.G) + int(c.B) }
 
 // tintSurface blends 20% of the accent over the given base. Strong
 // enough that the fill itself separates from Surface-painted panes;
-// paired with the SurfaceVariant base in paintToast.
+// paired with the neutral step-300 base in paintToast.
 func tintSurface(base, accent color.NRGBA) color.NRGBA {
 	return blend(base, accent, 0x33)
 }

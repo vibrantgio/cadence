@@ -459,10 +459,12 @@ func drawSplitPane(
 	return layout.Dimensions{Size: size}
 }
 
-// dividerColor selects an Outline-ish tint that registers a non-trivial
-// pixel delta against Surface on both light and dark schemes.
+// dividerColor is the semantic Divider token — ADR-007's "subtle border,
+// separator" step (neutral 300), one step past the Surface ground, so it
+// still registers a pixel delta against Surface on both light and dark
+// schemes.
 func dividerColor(c tokens.ColorTokens) color.NRGBA {
-	return c.Outline
+	return c.Divider
 }
 
 // ---- helpers -------------------------------------------------------------

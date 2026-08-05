@@ -7,14 +7,14 @@
 // stream of layout.Widget. The source is intentionally short and free of
 // opaque configuration — copy it into your own app and modify as needed.
 //
-// Layout: each Item renders as a rounded Surface card with a 1 dp Outline
+// Layout: each Item renders as a rounded Surface card with a 1 dp strong
 // border and S5 padding on all sides. The card stacks (top to bottom) an
 // opening double-quotation glyph in Primary rendered from a clip.Path,
-// the Quote body in body-large typography in OnSurface, and a horizontal
-// author block — the AuthorAvatar (or, when nil, an Outline-bordered
+// the Quote body in body-large typography in Text, and a horizontal
+// author block — the AuthorAvatar (or, when nil, a border-stroked
 // circular placeholder containing the first letter of AuthorName) sized
-// to S8 × S8, then a vertical stack of AuthorName in OnSurface and
-// AuthorRole in OnSurfaceVariant.
+// to S8 × S8, then a vertical stack of AuthorName in Text and
+// AuthorRole in the low-contrast neutral-700 step.
 //
 // The Single variant renders Items[0] in a single card centered inside an
 // S6 outer inset; Grid lays the cards out as a horizontal row of equal-
@@ -61,19 +61,19 @@ const (
 // Item describes a single testimonial card.
 type Item struct {
 	// Quote is the body of the testimonial rendered in body-large
-	// typography in OnSurface. Empty quotes collapse to zero height.
+	// typography in Text. Empty quotes collapse to zero height.
 	Quote string
 
-	// AuthorName is rendered in body-medium SemiBold OnSurface, above
+	// AuthorName is rendered in body-medium SemiBold Text, above
 	// AuthorRole inside the author block.
 	AuthorName string
 
-	// AuthorRole is rendered in body-small OnSurfaceVariant, below
+	// AuthorRole is rendered in body-small neutral 700, below
 	// AuthorName inside the author block.
 	AuthorRole string
 
 	// AuthorAvatar is an optional avatar widget rendered as an S8 × S8
-	// leading visual inside the author block. When nil, an Outline-
+	// leading visual inside the author block. When nil, a border-
 	// bordered circular placeholder containing the first letter of
 	// AuthorName is rendered instead.
 	AuthorAvatar layout.Widget
@@ -215,7 +215,7 @@ func drawGrid(gtx layout.Context, shaper *text.Shaper, items []Item, tok resolve
 
 // drawCard draws one testimonial card: a rounded Surface filled to its
 // allocated width with content height matching the inner stack plus S5
-// padding on all sides, framed with a 1 dp Outline stroke.
+// padding on all sides, framed with a 1 dp neutral step-500 stroke.
 func drawCard(gtx layout.Context, shaper *text.Shaper, item Item, tok resolvedTokens) layout.Dimensions {
 	pad := gtx.Dp(unit.Dp(tok.spacing.S5))
 	width := gtx.Constraints.Max.X
@@ -235,7 +235,7 @@ func drawCard(gtx layout.Context, shaper *text.Shaper, item Item, tok resolvedTo
 
 	paint.FillShape(gtx.Ops, tok.color.Surface, rrect.Op(gtx.Ops))
 	strokeW := float32(gtx.Dp(unit.Dp(1)))
-	paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{Path: rrect.Path(gtx.Ops), Width: strokeW}.Op())
+	paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{Path: rrect.Path(gtx.Ops), Width: strokeW}.Op())
 
 	off := op.Offset(image.Pt(pad, pad)).Push(gtx.Ops)
 	contentCall.Add(gtx.Ops)
@@ -299,7 +299,7 @@ func appendComma(path *clip.Path, x, y, w, h int) {
 }
 
 // quoteBodyWidget renders the quote text in the BodyLarge role in
-// OnSurface. Wrap to up to four lines so longer testimonials remain
+// Text. Wrap to up to four lines so longer testimonials remain
 // readable without growing the card unboundedly.
 func quoteBodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
@@ -307,7 +307,7 @@ func quoteBodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layo
 			return layout.Dimensions{}
 		}
 		mColor := op.Record(gtx.Ops)
-		paint.ColorOp{Color: tok.color.OnSurface}.Add(gtx.Ops)
+		paint.ColorOp{Color: tok.color.Text}.Add(gtx.Ops)
 		material := mColor.Stop()
 		wl := widget.Label{MaxLines: 4}
 		if tok.quote.LineHeight != 0 {
@@ -329,8 +329,8 @@ func authorBlockWidget(shaper *text.Shaper, item Item, tok resolvedTokens) layou
 			layout.Rigid(pllayout.HSpacer(tok.spacing.S3)),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return pllayout.Col(gtx,
-					textWidget(shaper, item.AuthorName, tok.color.OnSurface, tok.body, font.SemiBold),
-					textWidget(shaper, item.AuthorRole, tok.color.OnSurfaceVariant, tok.small, font.Normal),
+					textWidget(shaper, item.AuthorName, tok.color.Text, tok.body, font.SemiBold),
+					textWidget(shaper, item.AuthorRole, tok.color.Ramps.Neutral.Step(700), tok.small, font.Normal),
 				)
 			}),
 		)
@@ -338,7 +338,7 @@ func authorBlockWidget(shaper *text.Shaper, item Item, tok resolvedTokens) layou
 }
 
 // avatarWidget renders the caller-supplied avatar widget clipped to an
-// S8 × S8 square. When item.AuthorAvatar is nil, an Outline-bordered
+// S8 × S8 square. When item.AuthorAvatar is nil, a border-stroked
 // circular placeholder containing the first rune of item.AuthorName is
 // drawn instead.
 func avatarWidget(shaper *text.Shaper, item Item, tok resolvedTokens) layout.Widget {
@@ -357,14 +357,14 @@ func avatarWidget(shaper *text.Shaper, item Item, tok resolvedTokens) layout.Wid
 	}
 }
 
-// drawPlaceholder paints a hollow Outline-stroked circle of diameter
+// drawPlaceholder paints a hollow step-500-stroked circle of diameter
 // `size` and, when name is non-empty, the first rune centred inside it
-// in BodyMedium OnSurfaceVariant.
+// in BodyMedium neutral 700.
 func drawPlaceholder(gtx layout.Context, shaper *text.Shaper, name string, size int, tok resolvedTokens) {
 	r := size / 2
 	stroke := float32(gtx.Dp(unit.Dp(1)))
 	circle := clip.RRect{Rect: image.Rectangle{Max: image.Pt(size, size)}, SE: r, SW: r, NE: r, NW: r}
-	paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{Path: circle.Path(gtx.Ops), Width: stroke}.Op())
+	paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{Path: circle.Path(gtx.Ops), Width: stroke}.Op())
 	if name == "" {
 		return
 	}
@@ -377,7 +377,7 @@ func drawPlaceholder(gtx layout.Context, shaper *text.Shaper, name string, size 
 	letterGtx := gtx
 	letterGtx.Constraints = layout.Constraints{Max: image.Pt(size, size)}
 	mColor := op.Record(gtx.Ops)
-	paint.ColorOp{Color: tok.color.OnSurfaceVariant}.Add(gtx.Ops)
+	paint.ColorOp{Color: tok.color.Ramps.Neutral.Step(700)}.Add(gtx.Ops)
 	material := mColor.Stop()
 	mLabel := op.Record(gtx.Ops)
 	wl := widget.Label{MaxLines: 1, Alignment: text.Middle}

@@ -14,7 +14,7 @@
 // cadence pair in display typography with the cadence muted, a vertical
 // feature list with a leading checkmark glyph rendered from a clip.Path,
 // and a footer CTA button reusing prism/button's filled visual. The
-// Highlighted tier swaps the 1 dp Outline border for a 2 dp Primary
+// Highlighted tier swaps the 1 dp strong border for a 2 dp Primary
 // border.
 //
 // No responsive breakpoint to stack tiers vertically is provided —
@@ -217,7 +217,7 @@ func drawPricing(
 // drawTier draws a single tier card: a rounded Surface filled to its
 // allocated width with content height matching the inner stack plus
 // S5 padding on all sides. The border is 2 dp Primary when Highlighted,
-// 1 dp Outline otherwise.
+// 1 dp neutral step-500 (strong border) otherwise.
 func drawTier(
 	gtx layout.Context,
 	shaper *text.Shaper,
@@ -244,7 +244,7 @@ func drawTier(
 	paint.FillShape(gtx.Ops, tok.color.Surface, rrect.Op(gtx.Ops))
 
 	strokeW := float32(gtx.Dp(unit.Dp(1)))
-	strokeColor := tok.color.Outline
+	strokeColor := tok.color.Ramps.Neutral.Step(500)
 	if tier.Highlighted {
 		strokeW = float32(gtx.Dp(unit.Dp(2)))
 		strokeColor = tok.color.Primary
@@ -330,21 +330,21 @@ func popularChipWidget(shaper *text.Shaper, tok resolvedTokens) layout.Widget {
 }
 
 // tierNameWidget renders the tier name in the TitleLarge role in
-// OnSurface. A zero style weight (the legacy Render path synthesizes
+// Text. A zero style weight (the legacy Render path synthesizes
 // size-only styles) falls back to SemiBold, matching the pre-Typography
 // rendering.
 func tierNameWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurface, tok.name, font.SemiBold)
+	return textWidget(shaper, label, tok.color.Text, tok.name, font.SemiBold)
 }
 
-// priceRowWidget renders the price (DisplaySmall OnSurface) followed by
-// the muted cadence (BodyMedium OnSurfaceVariant) in a horizontal row
+// priceRowWidget renders the price (DisplaySmall Text) followed by
+// the muted cadence (BodyMedium neutral 700) in a horizontal row
 // with an S1 gap. Cross-axis Alignment.End approximates baseline
 // alignment for the prominent price next to its smaller cadence suffix.
 func priceRowWidget(shaper *text.Shaper, price, cadence string, tok resolvedTokens) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		priceW := textWidget(shaper, price, tok.color.OnSurface, tok.price, font.SemiBold)
-		cadenceW := textWidget(shaper, cadence, tok.color.OnSurfaceVariant, tok.body, font.Normal)
+		priceW := textWidget(shaper, price, tok.color.Text, tok.price, font.SemiBold)
+		cadenceW := textWidget(shaper, cadence, tok.color.Ramps.Neutral.Step(700), tok.body, font.Normal)
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,
 			layout.Rigid(priceW),
 			layout.Rigid(pllayout.HSpacer(tok.spacing.S1)),
@@ -354,14 +354,14 @@ func priceRowWidget(shaper *text.Shaper, price, cadence string, tok resolvedToke
 }
 
 // featureRowWidget renders a single feature bullet: a Primary checkmark
-// glyph followed by the feature label in BodyMedium OnSurface, joined
+// glyph followed by the feature label in BodyMedium Text, joined
 // by an S2 gap and centered vertically.
 func featureRowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(checkmarkWidget(tok)),
 			layout.Rigid(pllayout.HSpacer(tok.spacing.S2)),
-			layout.Rigid(textWidget(shaper, label, tok.color.OnSurface, tok.body, font.Normal)),
+			layout.Rigid(textWidget(shaper, label, tok.color.Text, tok.body, font.Normal)),
 		)
 	}
 }

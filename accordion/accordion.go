@@ -283,7 +283,7 @@ func drawHeader(
 
 	inner := func(gtx layout.Context) layout.Dimensions {
 		// Chevron, centred inside the leading icon column.
-		drawChevron(gtx, open, image.Pt(chevW, size.Y), colors.OnSurface)
+		drawChevron(gtx, open, image.Pt(chevW, size.Y), colors.Text)
 
 		// Title label, trailing the chevron column.
 		labelMaxW := size.X - chevW - padH
@@ -294,7 +294,7 @@ func drawHeader(
 			labelGtx.Constraints.Max.Y = size.Y
 
 			mColor := op.Record(gtx.Ops)
-			paint.ColorOp{Color: colors.OnSurface}.Add(gtx.Ops)
+			paint.ColorOp{Color: colors.Text}.Add(gtx.Ops)
 			material := mColor.Stop()
 
 			// Shape with the LabelLarge role's typeface, weight, size and
@@ -329,7 +329,7 @@ func drawHeader(
 			divH = 1
 		}
 		divRect := image.Rect(0, size.Y-divH, size.X, size.Y)
-		paint.FillShape(gtx.Ops, colors.Outline, clip.Rect(divRect).Op())
+		paint.FillShape(gtx.Ops, colors.Divider, clip.Rect(divRect).Op())
 
 		return layout.Dimensions{Size: size}
 	}

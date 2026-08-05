@@ -1,8 +1,8 @@
 // Package breadcrumb provides the Cadence Breadcrumb pattern: a horizontal
 // row of labels separated by chevron glyphs that indicate hierarchical
-// location. The last segment renders in OnSurface (the current location);
-// preceding segments render in OnSurfaceVariant and may invoke an OnClick
-// callback to navigate.
+// location. The last segment renders in Text (the current location);
+// preceding segments render in the low-contrast neutral-700 step and may
+// invoke an OnClick callback to navigate.
 //
 // The package follows the Phase 4 Composition contract: Breadcrumb is a
 // callable Go function consuming a Prism theme observable, returning a
@@ -10,7 +10,7 @@
 // opaque configuration — copy it into your own app and modify as needed.
 //
 // Colour and interactivity are decided independently and can disagree.
-// The OnSurface "current location" colour goes to the last Item by
+// The Text "current location" colour goes to the last Item by
 // position, whatever its OnClick; a segment is clickable exactly when its
 // own OnClick is non-nil. The conventional trail — every segment but the
 // last carrying an OnClick — is the caller's to build, and nothing here
@@ -158,7 +158,7 @@ func drawBreadcrumb(
 		if i > 0 {
 			children = append(children,
 				layout.Rigid(pllayout.HSpacer(sp.S2)),
-				layout.Rigid(chevronWidget(chevronDp, colors.OnSurfaceVariant)),
+				layout.Rigid(chevronWidget(chevronDp, colors.Ramps.Neutral.Step(700))),
 				layout.Rigid(pllayout.HSpacer(sp.S2)),
 			)
 		}
@@ -168,13 +168,13 @@ func drawBreadcrumb(
 }
 
 // labelColor returns the foreground colour for the segment at index i in
-// a breadcrumb of n items. The last segment uses OnSurface (current
-// location); preceding segments use OnSurfaceVariant.
+// a breadcrumb of n items. The last segment uses Text (current location);
+// preceding segments use the low-contrast neutral-700 step.
 func labelColor(i, n int, colors tokens.ColorTokens) color.NRGBA {
 	if i == n-1 {
-		return colors.OnSurface
+		return colors.Text
 	}
-	return colors.OnSurfaceVariant
+	return colors.Ramps.Neutral.Step(700)
 }
 
 func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {

@@ -260,7 +260,11 @@ func eyebrowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout
 		if minH := 2 * padV; h < minH {
 			h = minH
 		}
-		bg := tintColor(tok.color.Primary, tok.color.Surface)
+		// A Primary tinted fill at the card-tint depth (ADR-007: ramp
+		// steps 100–300 are tinted fills): same lightness zone as the
+		// Surface ground, carrying the primary hue at full ramp chroma
+		// instead of the old 12% alpha blend.
+		bg := tok.color.Ramps.Primary.Step(200)
 		paint.FillShape(gtx.Ops, bg, pllayout.Pill(gtx.Ops, image.Rectangle{Max: image.Pt(w, h)}, rad))
 
 		st := op.Offset(image.Pt(padH, padV)).Push(gtx.Ops)
@@ -270,16 +274,17 @@ func eyebrowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout
 	}
 }
 
-// titleWidget renders the DisplaySmall-role title in OnSurface. A zero
+// titleWidget renders the DisplaySmall-role title in Text. A zero
 // style weight (the legacy Render path synthesizes size-only styles)
 // falls back to SemiBold, matching the pre-Typography rendering.
 func titleWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurface, tok.title, font.SemiBold)
+	return textWidget(shaper, label, tok.color.Text, tok.title, font.SemiBold)
 }
 
-// subtitleWidget renders the BodyLarge-role subtitle in OnSurfaceVariant.
+// subtitleWidget renders the BodyLarge-role subtitle in the low-contrast
+// text step (neutral 700).
 func subtitleWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Widget {
-	return textWidget(shaper, label, tok.color.OnSurfaceVariant, tok.subtitle, font.Normal)
+	return textWidget(shaper, label, tok.color.Ramps.Neutral.Step(700), tok.subtitle, font.Normal)
 }
 
 func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle, fallbackWeight font.Weight) layout.Widget {
@@ -424,7 +429,7 @@ func drawOutlinedButton(gtx layout.Context, shaper *text.Shaper, label string, t
 
 	rrect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(w, h)}, SE: rad, SW: rad, NE: rad, NW: rad}
 	paint.FillShape(gtx.Ops, tok.color.Surface, rrect.Op(gtx.Ops))
-	paint.FillShape(gtx.Ops, tok.color.Outline, clip.Stroke{Path: rrect.Path(gtx.Ops), Width: stroke}.Op())
+	paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(500), clip.Stroke{Path: rrect.Path(gtx.Ops), Width: stroke}.Op())
 
 	offX := (w - labelDims.Size.X) / 2
 	offY := (h - labelDims.Size.Y) / 2
@@ -444,18 +449,4 @@ func ctaGtx(gtx layout.Context) layout.Context {
 		gtx.Constraints.Max.X = w
 	}
 	return gtx
-}
-
-// tintColor blends accent over base at ~12% alpha. Used for the eyebrow
-// pill so the tag remains a low-contrast surface against the canvas while
-// still legibly carrying Primary-coloured text.
-func tintColor(accent, base color.NRGBA) color.NRGBA {
-	const a = 0x1F
-	af := float32(a) / 255
-	return color.NRGBA{
-		R: uint8(float32(accent.R)*af + float32(base.R)*(1-af)),
-		G: uint8(float32(accent.G)*af + float32(base.G)*(1-af)),
-		B: uint8(float32(accent.B)*af + float32(base.B)*(1-af)),
-		A: 0xff,
-	}
 }

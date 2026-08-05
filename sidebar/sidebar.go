@@ -1,7 +1,8 @@
 // Package sidebar provides the Cadence Sidebar pattern: a collapsible
 // vertical Surface column that swaps between an expanded width
 // (label+icon) and a collapsed width (icon-only) on demand. The active
-// Item is rendered with a Primary background tint.
+// Item is rendered on the Primary ramp's selected step (ADR-007's
+// two-step walk past the Surface ground).
 //
 // The package follows the Phase 4 Composition contract: Sidebar is a
 // callable Go function consuming a Prism theme observable, returning a
@@ -31,7 +32,6 @@ package sidebar
 
 import (
 	"image"
-	"image/color"
 
 	"gioui.org/font"
 	"gioui.org/io/event"
@@ -53,8 +53,8 @@ import (
 
 // Item is one entry in the sidebar's list. OnClick may be nil, in which
 // case the item is treated as non-interactive and does not participate
-// in focus traversal. Active selects the Primary background tint and is
-// independent of OnClick.
+// in focus traversal. Active selects the Primary selected-state
+// background and is independent of OnClick.
 type Item struct {
 	Icon    layout.Widget
 	Label   string
@@ -284,7 +284,7 @@ func drawToggle(gtx layout.Context, tt *toggleTag, size image.Point, colors toke
 	gx := (size.X - g) / 2
 	gy := (size.Y - g) / 2
 	rect := image.Rect(gx, gy, gx+g, gy+g)
-	paint.FillShape(gtx.Ops, colors.OnSurfaceVariant, clip.Rect(rect).Op())
+	paint.FillShape(gtx.Ops, colors.Ramps.Neutral.Step(700), clip.Rect(rect).Op())
 
 	if tt == nil {
 		return
@@ -308,7 +308,12 @@ func drawItem(
 ) layout.Dimensions {
 	inner := func(gtx layout.Context) layout.Dimensions {
 		if item.Active {
-			paint.FillShape(gtx.Ops, primaryTint(colors.Primary), clip.Rect{Max: size}.Op())
+			// Selected background per ADR-007: a two-step walk past the
+			// sidebar's Surface ground (200 → 400) on the Primary ramp,
+			// keeping the highlight's primary hue as a real, addressable
+			// colour instead of the old 20%-alpha Primary tint.
+			active := colors.StateColor(tokens.RolePrimary, 200, tokens.StateSelected)
+			paint.FillShape(gtx.Ops, active, clip.Rect{Max: size}.Op())
 		}
 
 		iconW := gtx.Dp(unit.Dp(iconColDp))
@@ -347,7 +352,7 @@ func drawItem(
 			labelMaxW := size.X - iconW - padH
 			if labelMaxW > 0 {
 				mColor := op.Record(gtx.Ops)
-				paint.ColorOp{Color: colors.OnSurface}.Add(gtx.Ops)
+				paint.ColorOp{Color: colors.Text}.Add(gtx.Ops)
 				textMaterial := mColor.Stop()
 
 				labelGtx := gtx
@@ -392,11 +397,4 @@ func drawItem(
 		pointer.CursorPointer.Add(gtx.Ops)
 		return inner(gtx)
 	})
-}
-
-// primaryTint returns Primary at ~20% alpha so the underlying Surface
-// remains visible. The Tint depth is chosen to register a non-trivial
-// pixel delta on both light and dark schemes.
-func primaryTint(p color.NRGBA) color.NRGBA {
-	return color.NRGBA{R: p.R, G: p.G, B: p.B, A: 0x33}
 }

@@ -310,7 +310,7 @@ func drawHeaderRow[T any](
 	tok resolvedTokens,
 ) layout.Dimensions {
 	size := gtx.Constraints.Max
-	paint.FillShape(gtx.Ops, tok.color.SurfaceVariant, clip.Rect{Max: size}.Op())
+	paint.FillShape(gtx.Ops, tok.color.Ramps.Neutral.Step(300), clip.Rect{Max: size}.Op())
 
 	x := 0
 	for i, col := range columns {
@@ -331,7 +331,7 @@ func drawHeaderRow[T any](
 		divH = 1
 	}
 	divRect := image.Rect(0, size.Y-divH, size.X, size.Y)
-	paint.FillShape(gtx.Ops, tok.color.Outline, clip.Rect(divRect).Op())
+	paint.FillShape(gtx.Ops, tok.color.Divider, clip.Rect(divRect).Op())
 
 	return layout.Dimensions{Size: size}
 }
@@ -363,7 +363,7 @@ func drawHeaderCell[T any](
 			labelGtx.Constraints.Max.Y = size.Y
 
 			mColor := op.Record(gtx.Ops)
-			paint.ColorOp{Color: tok.color.OnSurfaceVariant}.Add(gtx.Ops)
+			paint.ColorOp{Color: tok.color.Ramps.Neutral.Step(700)}.Add(gtx.Ops)
 			material := mColor.Stop()
 
 			// Shape with the LabelLarge role's typeface, weight, size and
@@ -403,7 +403,7 @@ func drawHeaderCell[T any](
 			chev := gtx.Dp(unit.Dp(chevronSizeDp))
 			cx := size.X - padH - chev/2
 			cy := size.Y / 2
-			drawSortChevron(gtx, cx, cy, chev, tok.color.OnSurfaceVariant, asc)
+			drawSortChevron(gtx, cx, cy, chev, tok.color.Ramps.Neutral.Step(700), asc)
 		}
 
 		return layout.Dimensions{Size: size}
@@ -460,12 +460,12 @@ func drawRow[T any](
 		divH = 1
 	}
 	divRect := image.Rect(0, rowH-divH, totalW, rowH)
-	paint.FillShape(gtx.Ops, tok.color.Outline, clip.Rect(divRect).Op())
+	paint.FillShape(gtx.Ops, tok.color.Divider, clip.Rect(divRect).Op())
 
 	return layout.Dimensions{Size: rowSize}
 }
 
-// RenderTextCell renders a single line of OnSurface-coloured text within
+// RenderTextCell renders a single line of Text-coloured text within
 // the cell's allocated rectangle, with horizontal padding equal to
 // cellPadDp. Exported so consumers building their own Cell closures can
 // match the table's stock text style. The TypeScale parameter contributes
@@ -490,7 +490,7 @@ func RenderTextCell(
 		labelGtx.Constraints.Max.Y = size.Y
 
 		mColor := op.Record(gtx.Ops)
-		paint.ColorOp{Color: colors.OnSurface}.Add(gtx.Ops)
+		paint.ColorOp{Color: colors.Text}.Add(gtx.Ops)
 		material := mColor.Stop()
 
 		mLabel := op.Record(gtx.Ops)

@@ -167,7 +167,7 @@ func run(w *app.Window) error {
 // body is the modal's content: a short instructional paragraph.
 func (d *demo) body(gtx layout.Context) layout.Dimensions {
 	m := op.Record(gtx.Ops)
-	paint.ColorOp{Color: tokens.DefaultLight.OnSurfaceVariant}.Add(gtx.Ops)
+	paint.ColorOp{Color: tokens.DefaultLight.Ramps.Neutral.Step(700)}.Add(gtx.Ops)
 	mat := m.Stop()
 	lbl := widget.Label{}
 	return lbl.Layout(gtx, d.shaper, font.Font{}, unit.Sp(15),
@@ -209,7 +209,7 @@ func (d *demo) frame(gtx layout.Context) layout.Dimensions {
 				n := d.closes
 				d.mu.Unlock()
 				m := op.Record(gtx.Ops)
-				paint.ColorOp{Color: tokens.DefaultLight.OnBackground}.Add(gtx.Ops)
+				paint.ColorOp{Color: tokens.DefaultLight.Text}.Add(gtx.Ops)
 				mat := m.Stop()
 				lbl := widget.Label{MaxLines: 1}
 				return lbl.Layout(gtx, d.shaper, font.Font{}, unit.Sp(14),

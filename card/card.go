@@ -37,8 +37,8 @@ import (
 
 // Props configures a Card. All slot fields are optional; nil slots are
 // simply omitted from the inner stack. Elevated swaps the outlined
-// variant (1 dp Outline stroke) for a shadowed variant rendered via
-// pulse/depth at ElevationLevel2.
+// variant (1 dp neutral step-500 stroke, ADR-007's strong border) for a
+// shadowed variant rendered via pulse/depth at ElevationLevel2.
 type Props struct {
 	Header layout.Widget
 	Body   layout.Widget
@@ -96,7 +96,7 @@ func drawCard(gtx layout.Context, props Props, colors tokens.ColorTokens, sp tok
 	paint.FillShape(gtx.Ops, colors.Surface, rrect.Op(gtx.Ops))
 
 	if !props.Elevated {
-		paint.FillShape(gtx.Ops, colors.Outline, clip.Stroke{
+		paint.FillShape(gtx.Ops, colors.Ramps.Neutral.Step(500), clip.Stroke{
 			Path:  rrect.Path(gtx.Ops),
 			Width: float32(gtx.Dp(unit.Dp(1))),
 		}.Op())

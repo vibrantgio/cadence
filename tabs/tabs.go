@@ -296,7 +296,7 @@ func tabCell(
 			}
 
 			mColor := op.Record(gtx.Ops)
-			paint.ColorOp{Color: colors.OnSurface}.Add(gtx.Ops)
+			paint.ColorOp{Color: colors.Text}.Add(gtx.Ops)
 			textMaterial := mColor.Stop()
 
 			// Shape with the LabelLarge role's typeface, weight, size and

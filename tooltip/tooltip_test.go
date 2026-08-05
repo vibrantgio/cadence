@@ -64,7 +64,7 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 // TestTooltipGolden records or diffs the two Measurable goldens —
 // light-shown-top and dark-shown-bottom. The trigger is a small solid
 // rectangle and the surface contains a short label rendered in the
-// theme's Surface colour against the OnSurface bubble.
+// theme's Surface colour against the Text-filled bubble.
 //
 // Because Text is part of the contract, these goldens rasterise glyphs;
 // GPU font rasterisation can drift between driver/context versions. If a

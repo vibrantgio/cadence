@@ -285,8 +285,9 @@ func drawStatic(
 
 // drawSurface paints the rounded tooltip bubble with the Text label
 // inside, positioned adjacent to triggerRect per props.Placement. The
-// bubble uses the high-contrast OnSurface colour so it stands above the
-// underlying Surface; the text uses Surface for the same reason.
+// bubble is inverse-video: it fills with the high-contrast Text colour so
+// it stands above the underlying Surface, and its label paints in Surface
+// for the same reason.
 func drawSurface(
 	gtx layout.Context,
 	shaper *text.Shaper,
@@ -352,7 +353,7 @@ func drawSurface(
 
 	surfOff := op.Offset(pos).Push(gtx.Ops)
 	rect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(surfW, surfH)}, SE: r, SW: r, NE: r, NW: r}
-	paint.FillShape(gtx.Ops, tok.color.OnSurface, rect.Op(gtx.Ops))
+	paint.FillShape(gtx.Ops, tok.color.Text, rect.Op(gtx.Ops))
 	labelOff := op.Offset(image.Pt(padH, padV)).Push(gtx.Ops)
 	labelCall.Add(gtx.Ops)
 	labelOff.Pop()
