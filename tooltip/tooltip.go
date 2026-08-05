@@ -46,8 +46,11 @@ import (
 )
 
 // DefaultDelay is the show-after-entry delay applied when Props.Delay is
-// zero or negative.
-const DefaultDelay = 500 * time.Millisecond
+// zero or negative. It resolves from the motion scale's slowest stop
+// (DurXSlow, MD3 long2 = 500 ms — E3.1's mapping of the local 500 ms
+// constant it replaced); the live path reads the same stop from its
+// Theme.Motion snapshot, so a themed motion scale retimes the delay.
+var DefaultDelay = tokens.Motion.DurXSlow
 
 // Placement is the side of the trigger on which the tooltip surface sits.
 type Placement int
@@ -81,6 +84,9 @@ type resolvedTokens struct {
 	radius  tokens.RadiusScale
 	style   tokens.TextStyle // the LabelSmall role: typeface, weight, size, line height
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
+	// delay is the show-after-entry delay, the motion scale's DurXSlow
+	// stop. Props.Delay overrides it per instance.
+	delay time.Duration
 }
 
 // Tooltip returns an rx.Observable[layout.Widget] that emits a new widget
@@ -88,17 +94,14 @@ type resolvedTokens struct {
 // focus tag, entry-time stamp, default shaper) persists across emissions
 // in the rx.Defer scope.
 func Tooltip(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widget] {
-	delay := props.Delay
-	if delay <= 0 {
-		delay = DefaultDelay
-	}
 	// Flatten the nested theme observables into a concrete snapshot. The
 	// typography emission supplies both the LabelSmall text style and the
-	// theme's cached shaper (ADR-003: the theme owns the typeface).
+	// theme's cached shaper (ADR-003: the theme owns the typeface); the
+	// motion emission supplies the show delay.
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Motion),
+			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.MotionScale]) resolvedTokens {
 				typ := n.Fourth
 				return resolvedTokens{
 					color:   n.First,
@@ -106,6 +109,7 @@ func Tooltip(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 					radius:  n.Third,
 					style:   typ.LabelSmall,
 					shaper:  typ.Shaper(),
+					delay:   n.Fifth.DurXSlow,
 				}
 			},
 		)
@@ -114,10 +118,15 @@ func Tooltip(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 		st := newState()
 		return rx.Map(resolved, func(tok resolvedTokens) layout.Widget {
 			// Props.Shaper is an explicit override; the theme's shaper is
-			// the default.
+			// the default. Same for Props.Delay over the theme's motion
+			// stop.
 			shaper := props.Shaper
 			if shaper == nil {
 				shaper = tok.shaper
+			}
+			delay := props.Delay
+			if delay <= 0 {
+				delay = tok.delay
 			}
 			return func(gtx layout.Context) layout.Dimensions {
 				return drawTooltip(gtx, shaper, props, delay, tok, st, true)

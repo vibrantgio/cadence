@@ -3,7 +3,8 @@
 // package-scoped Notify entry point to emit a toast; one or more active
 // Stack subscriptions render the queued toasts in their chosen corner.
 // Each toast auto-dismisses after a configurable Lifetime, fading out
-// over the last fadeWindow of that lifetime via pulse/tween.
+// via pulse/tween over a trailing fade window resolved from the theme's
+// motion scale (Theme.Motion's DurSlow stop).
 //
 // The package follows the Phase 4 Composition contract: Stack is a
 // callable Go function consuming a Prism theme observable, returning a
@@ -73,10 +74,12 @@ const (
 // is zero or negative.
 const DefaultLifetime = 4 * time.Second
 
-// fadeWindow is the trailing slice of Lifetime during which a toast tweens
-// its alpha from 1.0 to 0.0. Picked short enough that the dismiss feels
-// snappy but long enough that the fade is perceptible at 60 fps.
-const fadeWindow = 400 * time.Millisecond
+// The trailing slice of Lifetime during which a toast tweens its alpha
+// from 1.0 to 0.0 resolves from the theme's motion scale: Theme.Motion's
+// DurSlow stop (MD3 medium4, 400 ms — E3.1's mapping of the local 400 ms
+// constant it replaced). Short enough that the dismiss feels snappy but
+// long enough that the fade is perceptible at 60 fps. It reaches the
+// frame path as resolvedTokens.fade.
 
 // Toast is a single notification value. Notify constructs one and pushes
 // it onto the package-scoped Subject; every active Stack receives it.
@@ -129,6 +132,10 @@ type resolvedTokens struct {
 	// widget; the base fill resolves through SurfaceAt, which reads the
 	// default tokens.Elevation scale.
 	elevation tokens.ElevationScale
+	// fade is the trailing fade window, the motion scale's DurSlow stop.
+	// Zero (the Render path) disables fading: toasts paint fully opaque
+	// until expiry.
+	fade time.Duration
 }
 
 // Stack returns an rx.Observable[layout.Widget] that renders a positioned
@@ -142,19 +149,25 @@ func Stack(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 	}
 	// Flatten the nested theme observables into a concrete snapshot. The
 	// typography emission supplies both the LabelMedium text style and the
-	// theme's cached shaper (ADR-003: the theme owns the typeface).
+	// theme's cached shaper (ADR-003: the theme owns the typeface); the
+	// motion emission supplies the fade window (rx tops out at
+	// CombineLatest5, hence the nested CombineLatest2).
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Elevation),
-			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.ElevationScale]) resolvedTokens {
-				typ := n.Fourth
+			rx.CombineLatest2(
+				rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Elevation),
+				t.Motion,
+			),
+			func(n rx.Tuple2[rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.ElevationScale], tokens.MotionScale]) resolvedTokens {
+				typ := n.First.Fourth
 				return resolvedTokens{
-					color:     n.First,
-					spacing:   n.Second,
-					radius:    n.Third,
+					color:     n.First.First,
+					spacing:   n.First.Second,
+					radius:    n.First.Third,
 					style:     typ.LabelMedium,
 					shaper:    typ.Shaper(),
-					elevation: n.Fifth,
+					elevation: n.First.Fifth,
+					fade:      n.Second.DurSlow,
 				}
 			},
 		)
@@ -235,8 +248,9 @@ func (s *stackState) enqueue(t Toast) {
 // snapshot returns a copy of the queue trimmed to non-expired entries.
 // addedAt is stamped on the first observation (zero → now). The earliest
 // expiry instant is returned so the caller can schedule InvalidateCmd.
-// If no toasts remain the returned time is zero.
-func (s *stackState) snapshot(now time.Time, lifetime time.Duration) (items []activeToast, nextWake time.Time) {
+// fade is the trailing fade window (resolvedTokens.fade). If no toasts
+// remain the returned time is zero.
+func (s *stackState) snapshot(now time.Time, lifetime, fade time.Duration) (items []activeToast, nextWake time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := s.items[:0]
@@ -250,7 +264,7 @@ func (s *stackState) snapshot(now time.Time, lifetime time.Duration) (items []ac
 		}
 		out = append(out, it)
 		// Wake at the start of fade or at expiry, whichever is sooner.
-		wake := expiresAt.Add(-fadeWindow)
+		wake := expiresAt.Add(-fade)
 		if wake.Before(now) {
 			wake = expiresAt
 		}
@@ -276,7 +290,7 @@ func drawStackLive(
 	st *stackState,
 ) layout.Dimensions {
 	now := gtx.Now
-	items, nextWake := st.snapshot(now, lifetime)
+	items, nextWake := st.snapshot(now, lifetime, tok.fade)
 	if len(items) > 0 {
 		// Always re-invalidate at the next wake; during the fade we
 		// also redraw every frame so the alpha animates smoothly.
@@ -284,7 +298,7 @@ func drawStackLive(
 			gtx.Execute(op.InvalidateCmd{At: nextWake})
 		}
 		for _, it := range items {
-			if now.Sub(it.addedAt) >= lifetime-fadeWindow {
+			if now.Sub(it.addedAt) >= lifetime-tok.fade {
 				gtx.Execute(op.InvalidateCmd{})
 				break
 			}
@@ -427,7 +441,7 @@ func paintToast(
 	padH := gtx.Dp(unit.Dp(tok.spacing.S3))
 	padV := gtx.Dp(unit.Dp(tok.spacing.S2))
 	r := gtx.Dp(unit.Dp(tok.radius.Md))
-	alpha := fadeAlpha(it, lifetime, now)
+	alpha := fadeAlpha(it, lifetime, tok.fade, now)
 
 	accent := accentColor(it.toast.Level, tok.color)
 	fill := withAlpha(tintSurface(tok.color.SurfaceAt(tokens.Level2), accent), alpha)
@@ -491,9 +505,10 @@ func paintToast(
 
 // fadeAlpha returns the toast's current alpha in [0,1]. lifetime==0 (the
 // Render path) or addedAt zero means "fully opaque". Inside the live
-// path, the alpha tweens from 1.0 to 0.0 across the final fadeWindow of
-// the lifetime via pulse/tween.LerpFloat64.
-func fadeAlpha(it activeToast, lifetime time.Duration, now time.Time) float64 {
+// path, the alpha tweens from 1.0 to 0.0 across the final fade window
+// (the theme's DurSlow stop) of the lifetime via pulse/tween.LerpFloat64;
+// a zero fade window paints fully opaque until expiry.
+func fadeAlpha(it activeToast, lifetime, fade time.Duration, now time.Time) float64 {
 	if lifetime <= 0 || it.addedAt.IsZero() {
 		return 1
 	}
@@ -501,16 +516,16 @@ func fadeAlpha(it activeToast, lifetime time.Duration, now time.Time) float64 {
 	if age >= lifetime {
 		return 0
 	}
-	if age < lifetime-fadeWindow {
+	if fade <= 0 || age < lifetime-fade {
 		return 1
 	}
 	tw := tween.Tween[float64]{
 		From:   1,
 		To:     0,
-		Frames: int(fadeWindow / time.Millisecond),
+		Frames: int(fade / time.Millisecond),
 		Lerp:   tween.LerpFloat64,
 	}
-	frame := int((age - (lifetime - fadeWindow)) / time.Millisecond)
+	frame := int((age - (lifetime - fade)) / time.Millisecond)
 	return tw.At(frame)
 }
 
