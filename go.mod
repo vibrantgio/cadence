@@ -5,9 +5,9 @@ go 1.25.1
 require (
 	gioui.org v0.10.1
 	github.com/reactivego/rx v0.3.0
-	github.com/vibrantgio/prism v0.1.5
+	github.com/vibrantgio/prism v0.1.6
 	github.com/vibrantgio/pulse v0.0.9
-	github.com/vibrantgio/spectrum v0.0.10
+	github.com/vibrantgio/spectrum v0.0.12
 )
 
 require (
@@ -17,6 +17,7 @@ require (
 	github.com/reactivego/scheduler v0.2.0 // indirect
 	github.com/vibrantgio/font v0.0.4 // indirect
 	github.com/vibrantgio/mvu v0.4.2 // indirect
+	github.com/vibrantgio/svg v0.0.8 // indirect
 	golang.org/x/exp/shiny v0.0.0-20260727155853-b88d891fe743 // indirect
 	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
