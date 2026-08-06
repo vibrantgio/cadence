@@ -199,9 +199,13 @@ func driveFrame(w layout.Widget, ops *op.Ops, r *gioinput.Router, size image.Poi
 }
 
 // TestSidebarArrowTraversalAndEnter verifies that
-//   - Arrow-Down from item 0 moves focus to item 1,
-//   - Arrow-Up from item 1 moves focus to item 0,
-//   - Enter activates the focused item via its OnClick.
+//   - Arrow-Down from item 0 moves the selection to item 1,
+//   - Arrow-Up from item 1 moves it back to item 0,
+//   - Enter activates the selected item via its OnClick.
+//
+// Since F4.7 the selection lives in the prism/list scroll region and the
+// rail has one focus tag rather than one per row, so what the click at
+// the start seeds is the list's focus, not the row's.
 //
 // With PxPerDp=1 and an expanded sidebar (192 wide), the toggle
 // occupies y∈[0,48] and item i occupies y∈[48+48i, 48+48(i+1)]. A
@@ -261,6 +265,132 @@ func TestSidebarArrowTraversalAndEnter(t *testing.T) {
 	driveFrame(w, ops, r, expandedSize)
 	if fired != [3]int{2, 1, 0} {
 		t.Fatalf("after Up+Enter, fired=%v; want [2 1 0]", fired)
+	}
+}
+
+// TestSidebarKeyboardReachesAnItemNeverLaidOut is the FX.6 gap, closed.
+//
+// Twelve items in a 256 px rail at Comfortable: the toggle takes the
+// first 36 px and each item 36 more, so the last row a frame could
+// possibly lay out starts at y=36+36×6=252 and item 11 would start at
+// y=432 — 176 px past the bottom of the canvas. It is not merely
+// offscreen, it has never existed: no clip area, no focus tag, nothing
+// for Tab to find. Before F4.7 the keyboard therefore stopped at the
+// viewport edge and items 7..11 were unreachable without a mouse.
+//
+// End must select item 11 anyway, and Enter must fire its OnClick.
+func TestSidebarKeyboardReachesAnItemNeverLaidOut(t *testing.T) {
+	const n = 12
+	const rowH = 36 // tokens.Comfortable.ControlHeight at PxPerDp=1
+	if top := rowH + rowH*(n-1); top <= canvasH {
+		t.Fatalf("item %d starts at y=%d, inside the %d px canvas; this test needs it to be unlaid-out",
+			n-1, top, canvasH)
+	}
+
+	fired := make([]int, n)
+	items := make([]sidebar.Item, n)
+	for i := range items {
+		i := i
+		items[i] = sidebar.Item{Icon: indexIcon(i), Label: itemLabels[i], OnClick: func(_ layout.Context) { fired[i]++ }}
+	}
+	props := sidebar.Props{Items: items, Collapsed: rx.Of(false), Shaper: defaultShaper(t)}
+	w := liveWidget(t, sidebar.Sidebar(rx.Of(theme.Default()), props))
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+	driveFrame(w, ops, r, expandedSize)
+	driveFrame(w, ops, r, expandedSize)
+
+	// Seed the rail's focus the way a user does: click item 0, which sits
+	// at y∈[36,72).
+	hit := f32.Pt(96, 54)
+	r.Queue(
+		pointer.Event{Kind: pointer.Press, Position: hit, Source: pointer.Touch},
+		pointer.Event{Kind: pointer.Release, Position: hit, Source: pointer.Touch},
+	)
+	driveFrame(w, ops, r, expandedSize)
+	if fired[0] != 1 {
+		t.Fatalf("click on item 0 fired %d time(s), want 1", fired[0])
+	}
+
+	before := capture(t, expandedSize, w)
+
+	// End selects the last item — the one no frame has laid out.
+	r.Queue(key.Event{Name: key.NameEnd, State: key.Press})
+	driveFrame(w, ops, r, expandedSize)
+	after := capture(t, expandedSize, w)
+	if before != nil && after != nil {
+		if d := pixelDiff(before, after); d == 0 {
+			t.Error("End changed nothing on screen: the selection did not move or the list did not follow it")
+		}
+	}
+
+	// Enter activates it.
+	r.Queue(
+		key.Event{Name: key.NameReturn, State: key.Press},
+		key.Event{Name: key.NameReturn, State: key.Release},
+	)
+	driveFrame(w, ops, r, expandedSize)
+	if fired[n-1] != 1 {
+		t.Fatalf("after End+Enter, item %d fired %d time(s), want 1; fired=%v", n-1, fired[n-1], fired)
+	}
+
+	// Home walks the whole way back.
+	r.Queue(key.Event{Name: key.NameHome, State: key.Press})
+	driveFrame(w, ops, r, expandedSize)
+	r.Queue(
+		key.Event{Name: key.NameReturn, State: key.Press},
+		key.Event{Name: key.NameReturn, State: key.Release},
+	)
+	driveFrame(w, ops, r, expandedSize)
+	if fired[0] != 2 {
+		t.Fatalf("after Home+Enter, item 0 fired %d time(s), want 2; fired=%v", fired[0], fired)
+	}
+}
+
+// TestSidebarActiveSeedsTheSelection pins the reconciliation F4.7 chose
+// between the caller's Item.Active and the list's own selection: Active
+// is a seed, not a competitor. The rail starts highlighting the Active
+// row, and the keyboard then moves the highlight off it — which is only
+// observable because both render through the same code path.
+func TestSidebarActiveSeedsTheSelection(t *testing.T) {
+	shaper := defaultShaper(t)
+	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
+
+	props := sidebar.Props{Items: navItems(3, 1), Collapsed: rx.Of(false), Shaper: shaper}
+	w := liveWidget(t, sidebar.Sidebar(rx.Of(theme.Default()), props))
+
+	r := new(gioinput.Router)
+	ops := new(op.Ops)
+	driveFrame(w, ops, r, expandedSize)
+	driveFrame(w, ops, r, expandedSize)
+
+	// The live rail with Active=1 must look like the static render with
+	// Active=1: the seed reaches the same highlight the Render path draws.
+	live := capture(t, expandedSize, scene(w, bg))
+	static := sidebar.Render(shaper, sidebar.Props{Items: navItems(3, 1), Shaper: shaper},
+		false, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
+	want := capture(t, expandedSize, scene(static, bg))
+	if live != nil && want != nil {
+		if d := pixelDiff(live, want); d != 0 {
+			t.Errorf("live rail seeded from Active differs from the static render by %d pixel(s); want 0", d)
+		}
+	}
+
+	// Tab into the rail. It is a single keyboard stop since F4.7 — the
+	// scroll region — so one FocusForward is all it takes, and there is
+	// nothing else in this widget for the router to land on.
+	r.MoveFocus(key.FocusForward)
+	driveFrame(w, ops, r, expandedSize)
+
+	// Home moves the selection to item 0, and the highlight with it.
+	r.Queue(key.Event{Name: key.NameHome, State: key.Press})
+	driveFrame(w, ops, r, expandedSize)
+	moved := capture(t, expandedSize, scene(w, bg))
+	if live != nil && moved != nil {
+		if d := pixelDiff(live, moved); d == 0 {
+			t.Error("Home left the highlight on the Active item; the selection is not driving it")
+		}
 	}
 }
 

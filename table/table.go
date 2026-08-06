@@ -11,6 +11,24 @@
 // matches the Phase 4 Composition contract: no opaque runtime configuration,
 // source is the spec, copy and modify as needed.
 //
+// # Keyboard reach
+//
+// F4.7 checked this package for the gap it fixed in cadence/sidebar — a
+// virtualised scroll region whose keyboard traversal was built on per-row
+// focus tags, so it could only ever reach the rows currently laid out — and
+// the answer is that the table has the same shape but not the same defect.
+// The body is virtualised through prism/list, so the precondition holds; what
+// is missing is the traversal. Body rows are not interactive at all: they
+// register no focus tag, no click and no selection, and the only keyboard
+// reach in the table is Tab onto a sortable header cell. Nothing is
+// unreachable, because nothing is reachable.
+//
+// So this is a latent version of the same problem rather than a live one, and
+// the instruction it leaves is for whoever adds row selection: take it from
+// prism/list's LayoutSelectable, which moves an index over every row, and not
+// from a focus tag per row, which cannot exist for a row the frame skipped.
+// The list.State this package already holds is where that selection lives.
+//
 // Per-row widget state (editors, checkboxes, expanders) is preserved across
 // sort/filter by wiring prism/keyed.Defer into a Column's Cell closure: the
 // consumer captures a *keyed.Deferred[K, *WidgetState] in the rx.Defer scope
