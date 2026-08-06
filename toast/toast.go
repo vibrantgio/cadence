@@ -428,8 +428,8 @@ func paintStack(
 // ground so the fill itself separates from Surface-painted panes; the
 // Surface-based 12% tint it replaced sat at ~1.2:1 against them — the
 // toast only read as a shape because of its outline. The fade alpha is
-// applied to the shadow (via PushOpacity), the fill, and the text
-// colour.
+// applied to the shadow (via its opacity argument), the fill, and the
+// text colour.
 func paintToast(
 	gtx layout.Context,
 	shaper *text.Shaper,
@@ -479,11 +479,11 @@ func paintToast(
 		h = gtx.Constraints.Min.Y
 	}
 
-	// The shadow, not the fill, separates the toast on dark themes; it
-	// shares the toast's fade so it never outlives the surface.
-	opacity := paint.PushOpacity(gtx.Ops, float32(alpha))
-	depth.Shadow(gtx, image.Rectangle{Max: image.Pt(w, h)}, tokens.Level3)
-	opacity.Pop()
+	// The shadow, not the fill, separates the toast on dark themes. It
+	// rounds to the fill's radius so its interior cannot show through
+	// the corners, and it takes the toast's fade alpha directly so it
+	// never outlives the surface.
+	depth.Shadow(gtx, image.Rectangle{Max: image.Pt(w, h)}, tokens.Level3, r, float32(alpha))
 
 	rect := clip.RRect{Rect: image.Rectangle{Max: image.Pt(w, h)}, SE: r, SW: r, NE: r, NW: r}
 	paint.FillShape(gtx.Ops, fill, rect.Op(gtx.Ops))
