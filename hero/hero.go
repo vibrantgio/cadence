@@ -41,11 +41,20 @@ import (
 	"github.com/vibrantgio/spectrum/tokens"
 )
 
-// ctaIntrinsicWidth is the natural CTA cell width in dp. Both CTAs are
-// constrained to this width so prism/button's "fill available Max" sizing
-// produces a fixed-width filled button, and the locally-rendered outlined
-// twin matches its footprint. Wider labels still grow the button because
-// button.Render lifts btnW to label width + 2×padH when needed.
+// ctaIntrinsicWidth is the minimum CTA cell width in dp. A CTA cell is at
+// least this wide, so prism/button's "fill available Max" sizing produces a
+// deliberate footprint for a short label rather than a button the width of the
+// word in it, and the locally-rendered outlined twin lines up beside it.
+// A label that needs more room gets it: [ctaGtx] measures the label first and
+// widens the cell to label + 2×PaddingX, up to whatever the row can give.
+//
+// It was a maximum until F4.4c, and the doc claimed the growth anyway. It
+// could not happen: the cell clamped Max.X to 120 dp, prism/button then
+// clamped its MaxLines:1 label to that less 2×PaddingX, and the growth branch
+// compared the cell width against a label width that had already been clamped
+// to fit inside it — so the comparison could never fire and "Read the docs"
+// drew as "Read the do…". Measuring the label before choosing the cell width
+// is what makes the promise true rather than merely written down.
 const ctaIntrinsicWidth = unit.Dp(120)
 
 // CTA describes a hero call-to-action. Label populates the button label and
@@ -361,7 +370,7 @@ func ctaRowWidget(
 func primaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, click *widget.Clickable) layout.Widget {
 	rendered := button.Render(shaper, label, tok.color, tok.spacing, tok.radius, tok.label, tok.density, button.RenderState{})
 	return func(gtx layout.Context) layout.Dimensions {
-		cgtx := ctaGtx(gtx)
+		cgtx := ctaGtx(gtx, shaper, label, tok)
 		if click == nil {
 			return rendered(cgtx)
 		}
@@ -384,7 +393,7 @@ func secondaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, c
 		return drawOutlinedButton(gtx, shaper, label, tok)
 	}
 	return func(gtx layout.Context) layout.Dimensions {
-		cgtx := ctaGtx(gtx)
+		cgtx := ctaGtx(gtx, shaper, label, tok)
 		if click == nil {
 			return draw(cgtx)
 		}
@@ -445,14 +454,40 @@ func drawOutlinedButton(gtx layout.Context, shaper *text.Shaper, label string, t
 	return layout.Dimensions{Size: image.Pt(w, h)}
 }
 
-// ctaGtx clamps a CTA cell to the package-wide intrinsic CTA width so the
-// Primary filled CTA (which fills its Max.X) and the Secondary outlined
-// CTA share a deterministic footprint inside the CTA row.
-func ctaGtx(gtx layout.Context) layout.Context {
+// ctaGtx sizes a CTA cell: [ctaIntrinsicWidth] as the floor, so the Primary
+// filled CTA (which fills its Max.X) and the Secondary outlined CTA share a
+// deterministic footprint inside the CTA row, and label + 2×PaddingX when the
+// label needs more than that, so no CTA is ever ellipsised by its own cell.
+// The row's available width caps both: a label too long for the hero still
+// truncates, but only against the hero, never against a constant.
+func ctaGtx(gtx layout.Context, shaper *text.Shaper, label string, tok resolvedTokens) layout.Context {
+	avail := gtx.Constraints.Max.X
+
 	w := gtx.Dp(ctaIntrinsicWidth)
+	if need := ctaLabelWidth(gtx, shaper, label, tok) + 2*gtx.Dp(unit.Dp(tok.density.PaddingX)); need > w {
+		w = need
+	}
+	if avail > 0 && w > avail {
+		w = avail
+	}
+
 	gtx.Constraints.Min = image.Point{}
 	if w < gtx.Constraints.Max.X || gtx.Constraints.Max.X == 0 {
 		gtx.Constraints.Max.X = w
 	}
 	return gtx
+}
+
+// ctaLabelWidth is the width label wants on one line in the CTA's type role,
+// measured with the constraints off so the answer is the label's own and not
+// the cell's. The ops are recorded and dropped; only the measurement is kept.
+func ctaLabelWidth(gtx layout.Context, shaper *text.Shaper, label string, tok resolvedTokens) int {
+	mgtx := gtx
+	mgtx.Constraints = layout.Constraints{Max: image.Pt(1<<20, 1<<20)}
+
+	wl := styleLabel(1, tok.label)
+	rec := op.Record(gtx.Ops)
+	dims := wl.Layout(mgtx, shaper, styleFont(tok.label, font.Normal), unit.Sp(tok.label.Size), label, op.CallOp{})
+	rec.Stop()
+	return dims.Size.X
 }

@@ -347,3 +347,73 @@ func loadImage(path string) (*image.RGBA, error) {
 		return rgba, nil
 	}
 }
+
+// TestLongCTALabelGrowsTheButton pins ctaIntrinsicWidth as a floor rather than
+// a cap, which is the third of the three false sizing claims F4.4/F4.4b found:
+// its own doc promised that "wider labels still grow the button", and the
+// clamp made that impossible. The cell pinned Max.X to 120 dp, prism/button
+// clamped its MaxLines:1 label to 120 − 2×PaddingX, and the growth branch then
+// compared the cell against a label already trimmed to fit inside it. "Read
+// the docs" drew as "Read the do…" and nothing in the suite noticed.
+//
+// The measurement is the filled CTA's own pixels: the widest unbroken run of
+// the Primary fill on any scanline is the button's width, since the button is
+// the only Primary-filled block in a hero and sharpRadius keeps its corners
+// square. A short label must sit at the 120 dp floor; a long one must be wider
+// than the floor and wide enough for its label plus both paddings.
+func TestLongCTALabelGrowsTheButton(t *testing.T) {
+	shaper := defaultShaper(t)
+	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	fill := tokens.DefaultLight.SolidStateColor(tokens.RolePrimary, tokens.StateNormal)
+
+	ctaWidth := func(label string) int {
+		p := heroText(shaper)
+		p.PrimaryCTA = &hero.CTA{Label: label}
+		w := hero.Render(shaper, p, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
+		img := capture(t, canvasSize, scene(w, bg))
+		if img == nil {
+			return -1
+		}
+		return widestRunOf(img, fill)
+	}
+
+	const floor = 120 // ctaIntrinsicWidth in px at the 1:1 metric capture uses
+
+	short := ctaWidth("Go")
+	if short < 0 {
+		return // headless unavailable; capture called t.Skip
+	}
+	if short != floor {
+		t.Errorf("short CTA drew %d px wide, want the %d px intrinsic floor", short, floor)
+	}
+
+	long := ctaWidth("Read the docs")
+	if long <= floor {
+		t.Errorf("CTA labelled %q drew %d px wide, still at or under the %d px floor: the label is being clipped to the cell instead of sizing it",
+			"Read the docs", long, floor)
+	}
+	if long <= short {
+		t.Errorf("a long CTA label (%d px) is no wider than a short one (%d px)", long, short)
+	}
+}
+
+// widestRunOf returns the longest unbroken horizontal run of exactly c in img.
+func widestRunOf(img *image.RGBA, c color.NRGBA) int {
+	want := color.RGBA{R: c.R, G: c.G, B: c.B, A: c.A}
+	b := img.Bounds()
+	best := 0
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		run := 0
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if img.RGBAAt(x, y) == want {
+				run++
+				if run > best {
+					best = run
+				}
+			} else {
+				run = 0
+			}
+		}
+	}
+	return best
+}
