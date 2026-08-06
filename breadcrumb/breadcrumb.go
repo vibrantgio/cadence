@@ -43,6 +43,7 @@ import (
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Item is one segment in the breadcrumb trail. OnClick may be nil, in which
@@ -211,16 +212,9 @@ func labelWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens
 		// Shape with the TitleSmall role's typeface, weight, size and line
 		// height. Zero fields (the legacy Render path synthesizes a
 		// size-only style) fall back to the shaper's defaults.
-		f := font.Font{Typeface: font.Typeface(style.Typeface)}
-		if style.Weight != 0 {
-			f.Weight = tokens.FontWeight(style.Weight)
-		}
-		wl := widget.Label{MaxLines: 1}
-		if style.LineHeight != 0 {
-			wl.LineHeight = unit.Sp(style.LineHeight)
-			wl.LineHeightScale = 1
-		}
-		return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), label, material)
+		f := typeset.Font(style, font.Normal)
+		wl := typeset.Label(style, 1)
+		return typeset.Layout(gtx, shaper, wl, f, unit.Sp(style.Size), label, material)
 	}
 }
 

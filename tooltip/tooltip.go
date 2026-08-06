@@ -38,11 +38,11 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // DefaultDelay is the show-after-entry delay applied when Props.Delay is
@@ -335,17 +335,10 @@ func drawSurface(
 	// height. Zero fields (the legacy Render path synthesizes a size-only
 	// style) fall back to the shaper's defaults.
 	style := tok.style
-	f := font.Font{Typeface: font.Typeface(style.Typeface)}
-	if style.Weight != 0 {
-		f.Weight = tokens.FontWeight(style.Weight)
-	}
-	wl := widget.Label{MaxLines: 1}
-	if style.LineHeight != 0 {
-		wl.LineHeight = unit.Sp(style.LineHeight)
-		wl.LineHeightScale = 1
-	}
+	f := typeset.Font(style, font.Normal)
+	wl := typeset.Label(style, 1)
 	mLabel := op.Record(gtx.Ops)
-	labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), props.Text, material)
+	labelDims := typeset.Layout(labelGtx, shaper, wl, f, unit.Sp(style.Size), props.Text, material)
 	labelCall := mLabel.Stop()
 
 	surfW := labelDims.Size.X + 2*padH

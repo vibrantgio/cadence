@@ -48,6 +48,7 @@ import (
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Link is one entry in the navbar's link row. OnClick may be nil, in
@@ -271,17 +272,10 @@ func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tok
 			// Shape with the LabelLarge role's typeface, weight, size and
 			// line height. Zero fields (the legacy Render path synthesizes
 			// a size-only style) fall back to the shaper's defaults.
-			f := font.Font{Typeface: font.Typeface(style.Typeface)}
-			if style.Weight != 0 {
-				f.Weight = tokens.FontWeight(style.Weight)
-			}
-			wl := widget.Label{MaxLines: 1}
-			if style.LineHeight != 0 {
-				wl.LineHeight = unit.Sp(style.LineHeight)
-				wl.LineHeightScale = 1
-			}
+			f := typeset.Font(style, font.Normal)
+			wl := typeset.Label(style, 1)
 			mLabel := op.Record(gtx.Ops)
-			labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), l.Label, textMaterial)
+			labelDims := typeset.Layout(labelGtx, shaper, wl, f, unit.Sp(style.Size), l.Label, textMaterial)
 			labelCall := mLabel.Stop()
 
 			cellW := labelDims.Size.X + 2*padH

@@ -66,6 +66,7 @@ import (
 	"github.com/vibrantgio/prism/list"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Item is one entry in the sidebar's list. OnClick may be nil, in which
@@ -409,17 +410,10 @@ func drawItem(
 				// and line height. Zero fields (the legacy Render path
 				// synthesizes a size-only style) fall back to the shaper's
 				// defaults.
-				f := font.Font{Typeface: font.Typeface(style.Typeface)}
-				if style.Weight != 0 {
-					f.Weight = tokens.FontWeight(style.Weight)
-				}
-				wl := widget.Label{MaxLines: 1}
-				if style.LineHeight != 0 {
-					wl.LineHeight = unit.Sp(style.LineHeight)
-					wl.LineHeightScale = 1
-				}
+				f := typeset.Font(style, font.Normal)
+				wl := typeset.Label(style, 1)
 				mLabel := op.Record(gtx.Ops)
-				labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), item.Label, textMaterial)
+				labelDims := typeset.Layout(labelGtx, shaper, wl, f, unit.Sp(style.Size), item.Label, textMaterial)
 				labelCall := mLabel.Stop()
 
 				offY := (size.Y - labelDims.Size.Y) / 2

@@ -43,6 +43,7 @@ import (
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // CTA describes a per-tier call-to-action. Label populates the button
@@ -319,8 +320,8 @@ func popularChipWidget(shaper *text.Shaper, tok resolvedTokens) layout.Widget {
 		labelGtx := gtx
 		labelGtx.Constraints.Min = image.Point{}
 		mLabel := op.Record(gtx.Ops)
-		wl := styleLabel(1, tok.chip)
-		labelDims := wl.Layout(labelGtx, shaper, styleFont(tok.chip, font.SemiBold), unit.Sp(tok.chip.Size), label, material)
+		wl := typeset.Label(tok.chip, 1)
+		labelDims := typeset.Layout(labelGtx, shaper, wl, typeset.Font(tok.chip, font.SemiBold), unit.Sp(tok.chip.Size), label, material)
 		labelCall := mLabel.Stop()
 
 		w := labelDims.Size.X + 2*padH
@@ -418,8 +419,9 @@ func ctaWidget(shaper *text.Shaper, cta *CTA, tok resolvedTokens, click *widget.
 	}
 }
 
-// textWidget renders a single-line widget.Label in the supplied colour
-// and text style. Empty labels collapse to zero dimensions so adjacent
+// textWidget renders a single-line label in the supplied colour and text
+// style, through spectrum/typeset so the role's line height is the height
+// of the line box. Empty labels collapse to zero dimensions so adjacent
 // section gaps are the only vertical contribution. A zero style weight
 // (the legacy Render path synthesizes size-only styles) falls back to
 // fallbackWeight, the pre-Typography hard-coded weight for the site.
@@ -431,29 +433,7 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
-		wl := styleLabel(1, style)
-		return wl.Layout(gtx, shaper, styleFont(style, fallbackWeight), unit.Sp(style.Size), label, material)
+		wl := typeset.Label(style, 1)
+		return typeset.Layout(gtx, shaper, wl, typeset.Font(style, fallbackWeight), unit.Sp(style.Size), label, material)
 	}
-}
-
-// styleFont builds the font.Font for style. The style's typeface is
-// honoured; a zero style weight falls back to fallback, the
-// pre-Typography hard-coded weight for the draw site.
-func styleFont(style tokens.TextStyle, fallback font.Weight) font.Font {
-	f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallback}
-	if style.Weight != 0 {
-		f.Weight = tokens.FontWeight(style.Weight)
-	}
-	return f
-}
-
-// styleLabel builds a widget.Label honouring the style's line height; a
-// zero line height stays at the shaper's default.
-func styleLabel(maxLines int, style tokens.TextStyle) widget.Label {
-	wl := widget.Label{MaxLines: maxLines}
-	if style.LineHeight != 0 {
-		wl.LineHeight = unit.Sp(style.LineHeight)
-		wl.LineHeightScale = 1
-	}
-	return wl
 }

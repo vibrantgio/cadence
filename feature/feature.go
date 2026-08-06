@@ -30,12 +30,12 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // defaultColumns is the column count used when Props.Columns is zero.
@@ -259,10 +259,12 @@ func bodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout.Wi
 	return textWidget(shaper, label, tok.color.Ramps.Neutral.Step(700), tok.body, font.Normal)
 }
 
-// textWidget renders a wrapped widget.Label in the supplied colour and
-// text style. The style's typeface, weight, size and line height are
-// honoured; a zero style weight falls back to fallbackWeight and a zero
-// line height stays at the shaper's default.
+// textWidget renders a wrapped label in the supplied colour and text
+// style. The style's typeface, weight, size and line height are honoured;
+// a zero style weight falls back to fallbackWeight and a zero line height
+// stays at the shaper's default. Laid out through spectrum/typeset, so the
+// role's line height is the height of each line box rather than a value
+// widget.Label would spend only on the gaps between wrapped lines.
 func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.TextStyle, fallbackWeight font.Weight) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		if label == "" {
@@ -271,16 +273,9 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
-		f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallbackWeight}
-		if style.Weight != 0 {
-			f.Weight = tokens.FontWeight(style.Weight)
-		}
-		wl := widget.Label{MaxLines: 3}
-		if style.LineHeight != 0 {
-			wl.LineHeight = unit.Sp(style.LineHeight)
-			wl.LineHeightScale = 1
-		}
-		return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), label, material)
+		f := typeset.Font(style, fallbackWeight)
+		wl := typeset.Label(style, 3)
+		return typeset.Layout(gtx, shaper, wl, f, unit.Sp(style.Size), label, material)
 	}
 }
 

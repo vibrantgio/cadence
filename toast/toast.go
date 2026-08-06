@@ -39,7 +39,6 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/prism/coordination"
@@ -47,6 +46,7 @@ import (
 	"github.com/vibrantgio/pulse/tween"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Level selects the toast's semantic palette.
@@ -465,16 +465,9 @@ func paintToast(
 	// height. Zero fields (the legacy Render path synthesizes a size-only
 	// style) fall back to the shaper's defaults.
 	style := tok.style
-	f := font.Font{Typeface: font.Typeface(style.Typeface)}
-	if style.Weight != 0 {
-		f.Weight = tokens.FontWeight(style.Weight)
-	}
-	wl := widget.Label{MaxLines: 1}
-	if style.LineHeight != 0 {
-		wl.LineHeight = unit.Sp(style.LineHeight)
-		wl.LineHeightScale = 1
-	}
-	labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), it.toast.Text, material)
+	f := typeset.Font(style, font.Normal)
+	wl := typeset.Label(style, 1)
+	labelDims := typeset.Layout(labelGtx, shaper, wl, f, unit.Sp(style.Size), it.toast.Text, material)
 	labelCall := mLabel.Stop()
 
 	w := gtx.Constraints.Max.X

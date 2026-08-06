@@ -55,6 +55,7 @@ import (
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Props configures a Modal. Body and OnClose may both be nil; Actions may
@@ -421,16 +422,9 @@ func headerWidget(shaper *text.Shaper, props Props, tok resolvedTokens, closeWid
 			// style; its zero weight falls back to SemiBold so the title
 			// keeps its pre-Typography emphasis against the body.
 			style := tok.title
-			f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: font.SemiBold}
-			if style.Weight != 0 {
-				f.Weight = tokens.FontWeight(style.Weight)
-			}
-			wl := widget.Label{MaxLines: 1}
-			if style.LineHeight != 0 {
-				wl.LineHeight = unit.Sp(style.LineHeight)
-				wl.LineHeightScale = 1
-			}
-			return wl.Layout(gtx, shaper, f, unit.Sp(style.Size), props.Title, material)
+			f := typeset.Font(style, font.SemiBold)
+			wl := typeset.Label(style, 1)
+			return typeset.Layout(gtx, shaper, wl, f, unit.Sp(style.Size), props.Title, material)
 		})
 		if closeWidget == nil {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, titleFlex)

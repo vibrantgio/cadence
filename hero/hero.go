@@ -39,6 +39,7 @@ import (
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // ctaIntrinsicWidth is the minimum CTA cell width in dp. A CTA cell is at
@@ -264,8 +265,8 @@ func eyebrowWidget(shaper *text.Shaper, label string, tok resolvedTokens) layout
 		labelGtx := gtx
 		labelGtx.Constraints.Min = image.Point{}
 		mLabel := op.Record(gtx.Ops)
-		wl := styleLabel(1, tok.eyebrow)
-		labelDims := wl.Layout(labelGtx, shaper, styleFont(tok.eyebrow, font.SemiBold), unit.Sp(tok.eyebrow.Size), label, material)
+		wl := typeset.Label(tok.eyebrow, 1)
+		labelDims := typeset.Layout(labelGtx, shaper, wl, typeset.Font(tok.eyebrow, font.SemiBold), unit.Sp(tok.eyebrow.Size), label, material)
 		labelCall := mLabel.Stop()
 
 		w := labelDims.Size.X + 2*padH
@@ -311,31 +312,9 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
-		wl := styleLabel(2, style)
-		return wl.Layout(gtx, shaper, styleFont(style, fallbackWeight), unit.Sp(style.Size), label, material)
+		wl := typeset.Label(style, 2)
+		return typeset.Layout(gtx, shaper, wl, typeset.Font(style, fallbackWeight), unit.Sp(style.Size), label, material)
 	}
-}
-
-// styleFont builds the font.Font for style. The style's typeface is
-// honoured; a zero style weight falls back to fallback, the
-// pre-Typography hard-coded weight for the draw site.
-func styleFont(style tokens.TextStyle, fallback font.Weight) font.Font {
-	f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallback}
-	if style.Weight != 0 {
-		f.Weight = tokens.FontWeight(style.Weight)
-	}
-	return f
-}
-
-// styleLabel builds a widget.Label honouring the style's line height; a
-// zero line height stays at the shaper's default.
-func styleLabel(maxLines int, style tokens.TextStyle) widget.Label {
-	wl := widget.Label{MaxLines: maxLines}
-	if style.LineHeight != 0 {
-		wl.LineHeight = unit.Sp(style.LineHeight)
-		wl.LineHeightScale = 1
-	}
-	return wl
 }
 
 // ctaRowWidget lays out the optional Primary/Secondary CTAs in a horizontal
@@ -429,8 +408,8 @@ func drawOutlinedButton(gtx layout.Context, shaper *text.Shaper, label string, t
 		labelGtx.Constraints.Max.X = maxLabelW
 	}
 	mLabel := op.Record(gtx.Ops)
-	wl := styleLabel(1, tok.label)
-	labelDims := wl.Layout(labelGtx, shaper, styleFont(tok.label, font.Normal), unit.Sp(tok.label.Size), label, material)
+	wl := typeset.Label(tok.label, 1)
+	labelDims := typeset.Layout(labelGtx, shaper, wl, typeset.Font(tok.label, font.Normal), unit.Sp(tok.label.Size), label, material)
 	labelCall := mLabel.Stop()
 
 	w := labelDims.Size.X + 2*padH
@@ -485,9 +464,9 @@ func ctaLabelWidth(gtx layout.Context, shaper *text.Shaper, label string, tok re
 	mgtx := gtx
 	mgtx.Constraints = layout.Constraints{Max: image.Pt(1<<20, 1<<20)}
 
-	wl := styleLabel(1, tok.label)
+	wl := typeset.Label(tok.label, 1)
 	rec := op.Record(gtx.Ops)
-	dims := wl.Layout(mgtx, shaper, styleFont(tok.label, font.Normal), unit.Sp(tok.label.Size), label, op.CallOp{})
+	dims := typeset.Layout(mgtx, shaper, wl, typeset.Font(tok.label, font.Normal), unit.Sp(tok.label.Size), label, op.CallOp{})
 	rec.Stop()
 	return dims.Size.X
 }

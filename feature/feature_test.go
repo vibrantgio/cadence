@@ -176,16 +176,30 @@ func featureLineHeightWidget(t *testing.T, lh float32) layout.Widget {
 	return scene(w, color.NRGBA{R: 240, G: 240, B: 240, A: 255})
 }
 
-// TestFeatureLineHeightGolden is the org's only golden that pins a role's line
-// height, and it lives here because this is where the property is observable.
+// TestFeatureLineHeightGolden is the golden that pins a role's line height at
+// a value that is not the role's own — the only one in the org that varies the
+// property rather than inheriting it — and it lives here because feature's cell
+// body is the widest wrapped run the system draws.
 //
-// gioui.org/text spends the line height on the gap between baselines and
-// nowhere else — calculateYOffsets baselines the first line at that line's own
-// ascent — and widget.Label reports the glyph ink bounds as its size. So a
-// MaxLines:1 label renders identically at any LineHeight, which is every
-// control in prism and most of the ones here. feature's cell body wraps to
-// three lines, so the role's line height is the distance between them, and a
-// regression in it moves these pixels.
+// It used to live here for a narrower reason, worth recording because it is no
+// longer true. gioui.org/text spends the line height on the gap between
+// baselines and nowhere else — calculateYOffsets baselines the first line at
+// that line's own ascent — and widget.Label reports the glyph ink bounds as its
+// size, so through widget.Label alone a MaxLines:1 label renders identically at
+// any LineHeight. That made a wrapped run the only place the property was
+// observable at all, and this was the only golden that had one. F4.4c built
+// spectrum/typeset to correct it and F4.4d put every cadence label on it, so
+// the property now moves single-line controls too and a dozen goldens in prism
+// pin it.
+//
+// What is left is still worth a golden, and it says more than it did. typeset
+// adds the missing first-line box as a deficit rather than a floor, so this
+// three-line body occupies exactly 3 × the line height instead of two gaps plus
+// one line of glyph ink. Measured on BodyMedium at 14 dp, whose natural line
+// inks 17 px: the run is 60 px at line height 20 and 96 px at 32, so the +12
+// this test applies lengthens it by 36 px. Before typeset the same two renders
+// were 57 and 81, and the +12 bought only 24 — the first line's own leading was
+// the part Gio never drew.
 func TestFeatureLineHeightGolden(t *testing.T) {
 	renderGolden(t, "light-3-up-tall-body-lines", canvasSize,
 		featureLineHeightWidget(t, tokens.DefaultTypography.BodyMedium.LineHeight+12))

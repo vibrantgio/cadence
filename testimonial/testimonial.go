@@ -37,12 +37,12 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	pllayout "github.com/vibrantgio/prism/layout"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Variant selects between the two testimonial layouts.
@@ -314,12 +314,8 @@ func quoteBodyWidget(shaper *text.Shaper, label string, tok resolvedTokens) layo
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: tok.color.Text}.Add(gtx.Ops)
 		material := mColor.Stop()
-		wl := widget.Label{MaxLines: 4}
-		if tok.quote.LineHeight != 0 {
-			wl.LineHeight = unit.Sp(tok.quote.LineHeight)
-			wl.LineHeightScale = 1
-		}
-		return wl.Layout(gtx, shaper, styleFont(tok.quote, font.Normal), unit.Sp(tok.quote.Size), label, material)
+		wl := typeset.Label(tok.quote, 4)
+		return typeset.Layout(gtx, shaper, wl, typeset.Font(tok.quote, font.Normal), unit.Sp(tok.quote.Size), label, material)
 	}
 }
 
@@ -385,12 +381,9 @@ func drawPlaceholder(gtx layout.Context, shaper *text.Shaper, name string, size 
 	paint.ColorOp{Color: tok.color.Ramps.Neutral.Step(700)}.Add(gtx.Ops)
 	material := mColor.Stop()
 	mLabel := op.Record(gtx.Ops)
-	wl := widget.Label{MaxLines: 1, Alignment: text.Middle}
-	if tok.body.LineHeight != 0 {
-		wl.LineHeight = unit.Sp(tok.body.LineHeight)
-		wl.LineHeightScale = 1
-	}
-	labelDims := wl.Layout(letterGtx, shaper, styleFont(tok.body, font.SemiBold), unit.Sp(tok.body.Size), letter, material)
+	wl := typeset.Label(tok.body, 1)
+	wl.Alignment = text.Middle
+	labelDims := typeset.Layout(letterGtx, shaper, wl, typeset.Font(tok.body, font.SemiBold), unit.Sp(tok.body.Size), letter, material)
 	labelCall := mLabel.Stop()
 
 	off := op.Offset(image.Pt((size-labelDims.Size.X)/2, (size-labelDims.Size.Y)/2)).Push(gtx.Ops)
@@ -398,8 +391,9 @@ func drawPlaceholder(gtx layout.Context, shaper *text.Shaper, name string, size 
 	off.Pop()
 }
 
-// textWidget renders a single-line widget.Label in the supplied colour
-// and text style. Empty labels collapse to zero dimensions so adjacent
+// textWidget renders a single-line label in the supplied colour and text
+// style, through spectrum/typeset so the role's line height is the height
+// of the line box. Empty labels collapse to zero dimensions so adjacent
 // section gaps are the only vertical contribution. A zero style weight
 // (the legacy Render path synthesizes size-only styles) falls back to
 // fallbackWeight, the pre-Typography hard-coded weight for the site.
@@ -411,21 +405,7 @@ func textWidget(shaper *text.Shaper, label string, fg color.NRGBA, style tokens.
 		mColor := op.Record(gtx.Ops)
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := mColor.Stop()
-		wl := widget.Label{MaxLines: 1}
-		if style.LineHeight != 0 {
-			wl.LineHeight = unit.Sp(style.LineHeight)
-			wl.LineHeightScale = 1
-		}
-		return wl.Layout(gtx, shaper, styleFont(style, fallbackWeight), unit.Sp(style.Size), label, material)
+		wl := typeset.Label(style, 1)
+		return typeset.Layout(gtx, shaper, wl, typeset.Font(style, fallbackWeight), unit.Sp(style.Size), label, material)
 	}
-}
-
-// styleFont builds the font.Font for style. The style's typeface is
-// honoured; a zero style weight falls back to fallback.
-func styleFont(style tokens.TextStyle, fallback font.Weight) font.Font {
-	f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: fallback}
-	if style.Weight != 0 {
-		f.Weight = tokens.FontWeight(style.Weight)
-	}
-	return f
 }

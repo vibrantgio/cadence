@@ -39,6 +39,7 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Section is one entry in the accordion's vertical stack. Body may be
@@ -305,17 +306,10 @@ func drawHeader(
 			// Shape with the LabelLarge role's typeface, weight, size and
 			// line height. Zero fields (the legacy Render path synthesizes
 			// a size-only style) fall back to the shaper's defaults.
-			f := font.Font{Typeface: font.Typeface(style.Typeface)}
-			if style.Weight != 0 {
-				f.Weight = tokens.FontWeight(style.Weight)
-			}
-			wl := widget.Label{MaxLines: 1}
-			if style.LineHeight != 0 {
-				wl.LineHeight = unit.Sp(style.LineHeight)
-				wl.LineHeightScale = 1
-			}
+			f := typeset.Font(style, font.Normal)
+			wl := typeset.Label(style, 1)
 			mLabel := op.Record(gtx.Ops)
-			labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(style.Size), sec.Title, material)
+			labelDims := typeset.Layout(labelGtx, shaper, wl, f, unit.Sp(style.Size), sec.Title, material)
 			labelCall := mLabel.Stop()
 
 			offY := (size.Y - labelDims.Size.Y) / 2

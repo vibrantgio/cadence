@@ -334,11 +334,36 @@ func densityTheme(d tokens.Density) theme.Theme {
 	return th
 }
 
+// barHeight is the height the navbar actually draws at density d: a link
+// cell is its label's line box plus the density's vertical padding above
+// and below plus the Active underline, and the bar insets that row by the
+// same PaddingY again.
+//
+// It is computed rather than taken from Density.ControlHeight on purpose.
+// The compact golden used to be captured at the shell's navbar pin,
+// ControlHeight + 2·PaddingY = 40 dp, on the theory that a bar wrapping
+// ControlHeight controls is exactly that tall. It never was — a link cell
+// carries a 2 dp underline the pin does not budget for — and F4.4d made the
+// gap visible by giving the label its line box (20 dp) instead of its glyph
+// ink (17 dp): the compact bar became exactly 40 dp of content in a 40 dp
+// window, its bottom padding squeezed to nothing and the underline flush
+// against the last pixel row. One more dp of line height and the golden
+// would have pinned a clipped underline. Compute the row the way the
+// component computes it, and the window cannot go stale that way again.
+func barHeight(d tokens.Density, style tokens.TextStyle) int {
+	cell := int(style.LineHeight) + 2*int(d.PaddingY) + navbarUnderlineDp
+	return cell + 2*int(d.PaddingY)
+}
+
+// navbarUnderlineDp mirrors the unexported underlineDp in the navbar
+// package: the thickness of the Active link's Primary indicator.
+const navbarUnderlineDp = 2
+
 // TestNavbarCompactGolden records or diffs the compact-density golden
 // through the LIVE pipeline (the static Render path is frozen at
 // tokens.Comfortable): the bar's vertical inset and the link padding
-// drop to the Compact PaddingY (6 dp). The canvas is the compact shell
-// pin, ControlHeight + 2·PaddingY = 40 dp.
+// drop to the Compact PaddingY (6 dp). The canvas is [barHeight] at
+// Compact — 46 dp, not the shell's 40 dp pin; see barHeight for why.
 func TestNavbarCompactGolden(t *testing.T) {
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	props := navbar.Props{
@@ -349,7 +374,53 @@ func TestNavbarCompactGolden(t *testing.T) {
 		Shaper: defaultShaper(t),
 	}
 	w := liveWidget(t, navbar.Navbar(rx.Of(densityTheme(tokens.Compact)), props))
-	renderGolden(t, "light-compact", image.Pt(canvasW, 40), scene(w, lightBG))
+	h := barHeight(tokens.Compact, tokens.DefaultTypography.LabelLarge)
+	renderGolden(t, "light-compact", image.Pt(canvasW, h), scene(w, lightBG))
+}
+
+// TestNavbarKeepsItsBottomPadding is the assertion the compact golden's
+// window used to make by accident, and it is why the window is computed
+// rather than assumed. In a canvas of [barHeight] the Active underline —
+// the lowest thing the bar draws — must clear the bottom PaddingY, so the
+// bar keeps the breathing room its own inset asks for and is nowhere near
+// the edge it would be clipped at.
+//
+// The navbar fills its constraints, so its reported Dimensions can never
+// report an overflow; only the pixels can. This reads them.
+func TestNavbarKeepsItsBottomPadding(t *testing.T) {
+	style := tokens.DefaultTypography.LabelLarge
+	primary := tokens.DefaultLight.Primary
+
+	for _, d := range []tokens.Density{tokens.Comfortable, tokens.Compact} {
+		props := navbar.Props{
+			Links:  []navbar.Link{{Label: linkLabels[0], Active: true, OnClick: func(_ layout.Context) {}}},
+			Shaper: defaultShaper(t),
+		}
+		w := liveWidget(t, navbar.Navbar(rx.Of(densityTheme(d)), props))
+		h := barHeight(d, style)
+		img := capture(t, image.Pt(canvasW, h), scene(w, color.NRGBA{R: 240, G: 240, B: 240, A: 255}))
+		if img == nil {
+			return // headless unavailable; capture called t.Skip
+		}
+
+		lowest := -1
+		for y := 0; y < h; y++ {
+			for x := 0; x < canvasW; x++ {
+				r, g, b, _ := img.At(x, y).RGBA()
+				if uint8(r>>8) == primary.R && uint8(g>>8) == primary.G && uint8(b>>8) == primary.B {
+					lowest = y
+					break
+				}
+			}
+		}
+		if lowest < 0 {
+			t.Fatalf("density %+v: no Primary pixel in the bar; the Active underline did not draw, so this proves nothing", d)
+		}
+		if want := h - int(d.PaddingY); lowest >= want {
+			t.Errorf("density %+v: the underline reaches row %d of a %d px bar, inside the %d dp bottom padding",
+				d, lowest, h, int(d.PaddingY))
+		}
+	}
 }
 
 // ---- golden harness (inlined; prism/internal/golden is not importable

@@ -39,6 +39,7 @@ import (
 	"github.com/vibrantgio/prism/list"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 // Column declares one column of a Table. Cell is invoked once per visible
@@ -385,19 +386,13 @@ func drawHeaderCell[T any](
 			// line height. A zero Weight (the legacy Render path synthesizes
 			// a size-only style) keeps the header's legacy bold weight.
 			style := tok.header
-			f := font.Font{Typeface: font.Typeface(style.Typeface), Weight: font.Bold}
-			if style.Weight != 0 {
-				f.Weight = tokens.FontWeight(style.Weight)
-			}
-			wl := widget.Label{MaxLines: 1}
-			if style.LineHeight != 0 {
-				wl.LineHeight = unit.Sp(style.LineHeight)
-				wl.LineHeightScale = 1
-			}
+			f := typeset.Font(style, font.Bold)
+			wl := typeset.Label(style, 1)
 			mLabel := op.Record(gtx.Ops)
-			labelDims := wl.Layout(
+			labelDims := typeset.Layout(
 				labelGtx,
 				shaper,
+				wl,
 				f,
 				unit.Sp(style.Size),
 				col.Header,
@@ -519,17 +514,10 @@ func RenderTextCell(
 		// Shape with the BodyMedium role's typeface, weight, size and line
 		// height. A zero Weight (a hand-built size-only style) keeps the
 		// shaper's default weight, as this cell always did.
-		f := font.Font{Typeface: font.Typeface(body.Typeface)}
-		if body.Weight != 0 {
-			f.Weight = tokens.FontWeight(body.Weight)
-		}
-		wl := widget.Label{MaxLines: 1}
-		if body.LineHeight != 0 {
-			wl.LineHeight = unit.Sp(body.LineHeight)
-			wl.LineHeightScale = 1
-		}
+		f := typeset.Font(body, font.Normal)
+		wl := typeset.Label(body, 1)
 		mLabel := op.Record(gtx.Ops)
-		labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(body.Size), s, material)
+		labelDims := typeset.Layout(labelGtx, shaper, wl, f, unit.Sp(body.Size), s, material)
 		labelCall := mLabel.Stop()
 
 		offY := (size.Y - labelDims.Size.Y) / 2
