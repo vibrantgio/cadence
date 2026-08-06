@@ -57,19 +57,34 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 	}
 }
 
-// TestNavbarGolden records or diffs the three Measurable goldens.
-// Labels are empty to avoid GPU font rasterisation differences across
-// platforms; each link cell is given (S3, S2) padding so the Active
-// link's Primary underline is a visible rectangle even with a zero-
-// width label. light-active-second-link therefore differs from
-// light-default by ~48 Blue pixels in the second link's cell.
+// linkLabels names the two links in document order. They were blank until
+// F4.4b, on the theory that font rasterisation was non-deterministic; F4.2
+// pinned the faces by configuration and F4.3 moved every golden onto
+// DeterministicShaper, so Latin text in Roboto rasterises identically on every
+// machine. ASCII only, per F4.2 — no symbol reaches a stored image.
+var linkLabels = [2]string{"Docs", "Components"}
+
+// links returns the two-link fixture, optionally marking one Active.
+// activeIdx < 0 means no link is active.
+func links(activeIdx int) []navbar.Link {
+	out := make([]navbar.Link, len(linkLabels))
+	for i, l := range linkLabels {
+		out[i] = navbar.Link{Label: l, Active: i == activeIdx}
+	}
+	return out
+}
+
+// TestNavbarGolden records or diffs the three Measurable goldens. Each link
+// cell is its label plus (S3, S2) padding, so the Active link's Primary
+// underline runs the width of the label rather than the width of the bare
+// padding it spanned while the labels were blank.
 func TestNavbarGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
 
-	defaultLinks := []navbar.Link{{Label: ""}, {Label: ""}}
-	activeSecond := []navbar.Link{{Label: ""}, {Label: "", Active: true}}
+	defaultLinks := links(-1)
+	activeSecond := links(1)
 
 	cases := []struct {
 		name   string
@@ -102,8 +117,8 @@ func TestNavbarActiveVsDefaultDiffer(t *testing.T) {
 		return capture(t, canvasSize, scene(w, bg))
 	}
 
-	def := render([]navbar.Link{{Label: ""}, {Label: ""}})
-	act := render([]navbar.Link{{Label: ""}, {Label: "", Active: true}})
+	def := render(links(-1))
+	act := render(links(1))
 	if def == nil || act == nil {
 		return
 	}
@@ -173,8 +188,8 @@ func TestNavbarTabTraversal(t *testing.T) {
 	props := navbar.Props{
 		Brand: brand,
 		Links: []navbar.Link{
-			{Label: "", OnClick: func(_ layout.Context) {}},
-			{Label: "", OnClick: func(_ layout.Context) {}},
+			{Label: linkLabels[0], OnClick: func(_ layout.Context) {}},
+			{Label: linkLabels[1], OnClick: func(_ layout.Context) {}},
 		},
 		Actions: []layout.Widget{action},
 		Shaper:  defaultShaper(t),
@@ -266,17 +281,21 @@ func TestNavbarTabTraversal(t *testing.T) {
 }
 
 // TestNavbarLinkClickFiresOnClick verifies clicking a link invokes its
-// OnClick callback. With PxPerDp=1, canvas 480×64, no brand, no
-// actions, two empty-label links: each link cell is 24×18, the link
-// row is 56 wide and centred at canvas-mid. Link 0 occupies x in
-// [212, 236] and y in [23, 41]; a press/release at (224, 32) lands
-// squarely inside.
+// OnClick callback. With PxPerDp=1, canvas 480×64, no brand, no actions, two
+// links: each cell is its label plus (S3, Density.PaddingY) padding and an
+// underline, separated by an S2 spacer, and the row is centred at canvas-mid.
+// "Docs" and "Components" measure 57 and 105 px, so the row is 57+8+105 = 170
+// wide and starts at x = 155; link 0 occupies x in [155, 212], y in [15, 49].
+// A press/release at (180, 32) lands squarely inside it, clear of link 1.
+//
+// Before F4.4b the labels were blank, every cell collapsed to its 24 px of
+// padding, and the coordinate was (224, 32) — which is now inside link 1.
 func TestNavbarLinkClickFiresOnClick(t *testing.T) {
 	var fired0, fired1 int
 	props := navbar.Props{
 		Links: []navbar.Link{
-			{Label: "", OnClick: func(_ layout.Context) { fired0++ }},
-			{Label: "", OnClick: func(_ layout.Context) { fired1++ }},
+			{Label: linkLabels[0], OnClick: func(_ layout.Context) { fired0++ }},
+			{Label: linkLabels[1], OnClick: func(_ layout.Context) { fired1++ }},
 		},
 		Shaper: defaultShaper(t),
 	}
@@ -290,7 +309,7 @@ func TestNavbarLinkClickFiresOnClick(t *testing.T) {
 	driveFrame(w, ops, r, canvasSize)
 	driveFrame(w, ops, r, canvasSize)
 
-	hit := f32.Pt(224, 32)
+	hit := f32.Pt(180, 32)
 	r.Queue(
 		pointer.Event{Kind: pointer.Press, Position: hit, Source: pointer.Touch},
 		pointer.Event{Kind: pointer.Release, Position: hit, Source: pointer.Touch},
@@ -324,8 +343,8 @@ func TestNavbarCompactGolden(t *testing.T) {
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	props := navbar.Props{
 		Links: []navbar.Link{
-			{Label: "", Active: true, OnClick: func(_ layout.Context) {}},
-			{Label: "", OnClick: func(_ layout.Context) {}},
+			{Label: linkLabels[0], Active: true, OnClick: func(_ layout.Context) {}},
+			{Label: linkLabels[1], OnClick: func(_ layout.Context) {}},
 		},
 		Shaper: defaultShaper(t),
 	}

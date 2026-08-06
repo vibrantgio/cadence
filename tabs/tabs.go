@@ -281,8 +281,7 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 // with a strip-height cell. When selected, a Primary-coloured underline
 // of underlineDp px is drawn along the cell's bottom edge. The cell
 // width is at least 2×S3 so the underline is visible even when the
-// label rasterises to zero width (e.g., in deterministic empty-label
-// golden tests).
+// label rasterises to zero width, which an empty Tab.Label does.
 func tabCell(
 	shaper *text.Shaper,
 	label string,

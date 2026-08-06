@@ -49,18 +49,29 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 	}
 }
 
-// TestBreadcrumbGolden records or diffs the three Measurable goldens.
-// Empty Item.Labels are used to avoid GPU font rasterisation differences
-// across platforms; the chevron separators are deterministic clip paths and
-// remain visible. The single-segment golden is therefore a near-blank
-// canvas — that is the structural assertion ("no chevrons when n == 1").
+// trail is the three-segment fixture: a real path, in document order, so the
+// last segment is the current location and the two before it are the
+// low-contrast ancestors. The labels were blank until F4.4b, on the theory
+// that font rasterisation was non-deterministic; F4.2 pinned the faces by
+// configuration and F4.3 moved every golden onto DeterministicShaper, so
+// Latin text in Roboto rasterises identically on every machine. ASCII only,
+// per F4.2 — no symbol reaches a stored image.
+func trail() []breadcrumb.Item {
+	return []breadcrumb.Item{{Label: "Home"}, {Label: "Design"}, {Label: "Tokens"}}
+}
+
+// TestBreadcrumbGolden records or diffs the three Measurable goldens. The
+// chevron separators are deterministic clip paths and the labels carry the
+// typography; the single-segment golden is the structural assertion ("no
+// chevrons when n == 1") and now also shows that the lone segment takes the
+// current-location colour that internal_test asserts numerically.
 func TestBreadcrumbGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
 
-	threeItems := []breadcrumb.Item{{Label: ""}, {Label: ""}, {Label: ""}}
-	singleItem := []breadcrumb.Item{{Label: ""}}
+	threeItems := trail()
+	singleItem := []breadcrumb.Item{{Label: "Home"}}
 
 	cases := []struct {
 		name   string
@@ -94,8 +105,8 @@ func TestBreadcrumbThreeVsSingle(t *testing.T) {
 		return capture(t, canvasSize, scene(w, bg))
 	}
 
-	three := render([]breadcrumb.Item{{Label: ""}, {Label: ""}, {Label: ""}})
-	single := render([]breadcrumb.Item{{Label: ""}})
+	three := render(trail())
+	single := render([]breadcrumb.Item{{Label: "Home"}})
 	if three == nil || single == nil {
 		return
 	}
@@ -110,7 +121,7 @@ func TestBreadcrumbLightDarkDiffer(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 
-	items := []breadcrumb.Item{{Label: ""}, {Label: ""}, {Label: ""}}
+	items := trail()
 	propsL := breadcrumb.Props{Items: items, Shaper: shaper}
 	propsD := breadcrumb.Props{Items: items, Shaper: shaper}
 	light := breadcrumb.Render(shaper, propsL, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.TitleSmall)

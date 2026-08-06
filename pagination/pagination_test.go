@@ -53,13 +53,17 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 }
 
 // TestPaginationGolden records or diffs the three Measurable goldens.
-// Page labels are empty strings inside the buttons (set by the renderer
-// internally as "1".."5") only via the digit glyph itself — GPU font
-// rasterisation differs slightly across platforms. To keep the goldens
-// deterministic we use a zero radius scale (sharp corners) and the
-// distinguishing signal across goldens is which cell carries the Primary
-// fill: page-1-of-5 highlights the first cell, page-3-of-5 highlights the
-// third, and the light vs dark variants flip the colour palette.
+//
+// Pagination is the one component here that F4.4b had nothing to fill in: it
+// has no caller-supplied label at all, and every cell already draws its own
+// page number in the LabelLarge role, so these goldens have carried real
+// glyphs since they were first recorded. What they take from F4.3 is the
+// pinned face — before it, the digits shaped with whatever the machine had.
+//
+// A zero radius scale (sharp corners) keeps the cell edges deterministic. The
+// distinguishing signal across goldens is which cell carries the Primary fill:
+// page-1-of-5 highlights the first cell, page-3-of-5 the third, and the light
+// and dark variants flip the palette.
 func TestPaginationGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}

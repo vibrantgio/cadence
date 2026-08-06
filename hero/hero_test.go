@@ -47,11 +47,60 @@ func defaultShaper(t *testing.T) *text.Shaper {
 	return tokens.DefaultTypography.DeterministicShaper()
 }
 
-// fillRect is a sharp-edged solid widget used as a Visual stand-in. We
-// avoid text in the Title/Subtitle/CTA labels so GPU font rasterisation
-// drift across platforms does not break the goldens; structural variations
-// (Visual presence, eyebrow pill, CTA backgrounds) still produce visibly
-// distinct images.
+// The hero's four text slots. They were empty — and the eyebrow a single
+// space, which is how it got a pill with nothing in it — until F4.4b, on the
+// theory that font rasterisation was non-deterministic; F4.2 pinned the faces
+// by configuration and F4.3 moved every golden onto DeterministicShaper, so
+// Latin text in Roboto rasterises identically on every machine. ASCII only,
+// per F4.2 — no symbol reaches a stored image.
+//
+// The title is short on purpose: with a Visual the text column is half of a
+// 480 px canvas, and DisplaySmall is the largest role in the scale, so a
+// longer title would wrap to three lines and push the subtitle off the bottom.
+const (
+	heroEyebrow  = "Design system"
+	heroTitle    = "Vibrant Gio"
+	heroSubtitle = "One coherent system for native desktop apps."
+	primaryCTA   = "Get started"
+	secondaryCTA = "Read docs"
+)
+
+// Both CTA labels are short for a reason worth writing down, because it is
+// the one thing filling these labels in revealed. ctaGtx clamps every CTA
+// cell to ctaIntrinsicWidth (120 dp) so the filled and outlined twins share a
+// footprint, and both button bodies then clamp the label to that width minus
+// 2×PaddingX and lay it out MaxLines:1 — so a label wider than roughly
+// 88 px is ellipsized, not grown into. "Read the docs" came out as
+// "Read the do…". That contradicts ctaIntrinsicWidth's own doc comment,
+// which promises "wider labels still grow the button"; the growth branch in
+// prism/button can never fire, because the label was already clamped to the
+// width being compared against. These two labels fit, so the goldens record
+// the hero rather than the clamp.
+
+// heroText returns the Props every case starts from: a title and a subtitle,
+// no eyebrow, no CTAs, no visual.
+func heroText(shaper *text.Shaper) hero.Props {
+	return hero.Props{Title: heroTitle, Subtitle: heroSubtitle, Shaper: shaper}
+}
+
+// withVisual adds the illustration slot, which splits the hero into two equal
+// columns with the text leading.
+func withVisual(p hero.Props, visual layout.Widget) hero.Props {
+	p.Visual = visual
+	return p
+}
+
+// withEyebrowAndCTAs adds the eyebrow pill and both call-to-action buttons.
+func withEyebrowAndCTAs(p hero.Props) hero.Props {
+	p.Eyebrow = heroEyebrow
+	p.PrimaryCTA = &hero.CTA{Label: primaryCTA}
+	p.SecondaryCTA = &hero.CTA{Label: secondaryCTA}
+	return p
+}
+
+// fillRect is a sharp-edged solid widget used as a Visual stand-in: Visual is
+// a caller-supplied illustration slot, so a flat block keeps it a structural
+// marker while the hero's own four roles carry the text.
 func fillRect(c color.NRGBA, heightDp float32) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(heightDp))
@@ -69,11 +118,10 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 	}
 }
 
-// TestHeroGolden records or diffs the four Measurable goldens. Text labels
-// are intentionally empty (or, for the eyebrow, a single space) so the
-// goldens do not depend on GPU font rasterisation; structural variations —
-// Visual slot presence, eyebrow pill, dual CTA backgrounds — are what
-// distinguishes the cases.
+// TestHeroGolden records or diffs the four Measurable goldens. The structural
+// variations — Visual slot presence, eyebrow pill, dual CTA backgrounds —
+// distinguish the cases; the four text roles (DisplaySmall title, BodyLarge
+// subtitle, LabelSmall eyebrow, LabelLarge CTA labels) carry the typography.
 func TestHeroGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
@@ -90,30 +138,25 @@ func TestHeroGolden(t *testing.T) {
 			name:   "light-text-only",
 			colors: tokens.DefaultLight,
 			bg:     lightBG,
-			props:  hero.Props{Shaper: shaper},
+			props:  heroText(shaper),
 		},
 		{
 			name:   "dark-text-only",
 			colors: tokens.DefaultDark,
 			bg:     darkBG,
-			props:  hero.Props{Shaper: shaper},
+			props:  heroText(shaper),
 		},
 		{
 			name:   "light-with-visual",
 			colors: tokens.DefaultLight,
 			bg:     lightBG,
-			props:  hero.Props{Visual: visual, Shaper: shaper},
+			props:  withVisual(heroText(shaper), visual),
 		},
 		{
 			name:   "light-eyebrow-and-dual-cta",
 			colors: tokens.DefaultLight,
 			bg:     lightBG,
-			props: hero.Props{
-				Eyebrow:      " ",
-				PrimaryCTA:   &hero.CTA{Label: ""},
-				SecondaryCTA: &hero.CTA{Label: ""},
-				Shaper:       shaper,
-			},
+			props:  withEyebrowAndCTAs(heroText(shaper)),
 		},
 	}
 	for _, tc := range cases {
@@ -133,11 +176,11 @@ func TestHeroVisualSlotShiftsLayout(t *testing.T) {
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	visual := fillRect(color.NRGBA{R: 60, G: 110, B: 200, A: 255}, 120)
 
-	textOnly := hero.Render(shaper, hero.Props{Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
-	withVisual := hero.Render(shaper, hero.Props{Visual: visual, Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
+	textOnly := hero.Render(shaper, heroText(shaper), tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
+	split := hero.Render(shaper, withVisual(heroText(shaper), visual), tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 
 	imgA := capture(t, canvasSize, scene(textOnly, bg))
-	imgB := capture(t, canvasSize, scene(withVisual, bg))
+	imgB := capture(t, canvasSize, scene(split, bg))
 	if imgA == nil || imgB == nil {
 		return
 	}
@@ -152,12 +195,7 @@ func TestHeroLightDarkDiffer(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 
-	props := hero.Props{
-		Eyebrow:      " ",
-		PrimaryCTA:   &hero.CTA{Label: ""},
-		SecondaryCTA: &hero.CTA{Label: ""},
-		Shaper:       shaper,
-	}
+	props := withEyebrowAndCTAs(heroText(shaper))
 	light := hero.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 	dark := hero.Render(shaper, props, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 

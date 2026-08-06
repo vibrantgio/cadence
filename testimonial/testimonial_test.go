@@ -59,12 +59,38 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 	}
 }
 
-// emptyItem returns an Item whose text fields are blank. Blank labels
-// keep the goldens independent of GPU font rasterisation; the quote
-// glyph, card chrome, and avatar placeholder circle carry the structural
-// differences instead.
-func emptyItem() testimonial.Item {
-	return testimonial.Item{}
+// testimonials are the three items in document order, so a grid reads as
+// three distinct cards rather than three copies. Every field was blank until
+// F4.4b, on the theory that font rasterisation was non-deterministic; F4.2
+// pinned the faces by configuration and F4.3 moved every golden onto
+// DeterministicShaper, so Latin text in Roboto rasterises identically on every
+// machine. ASCII only, per F4.2 — no symbol reaches a stored image, and the
+// decorative opening quote is a clip path the package draws itself.
+//
+// Filling AuthorName also lights up the avatar placeholder, which renders the
+// name's first letter when AuthorAvatar is nil: with a blank name that circle
+// held nothing, so the branch drew but never showed what it draws.
+var testimonials = [3]testimonial.Item{
+	{
+		Quote:      "The tokens finally agree across every app we ship.",
+		AuthorName: "Ada Fields",
+		AuthorRole: "Design lead",
+	},
+	{
+		Quote:      "We replaced three themes with one and lost nothing.",
+		AuthorName: "Ben Ortiz",
+		AuthorRole: "Engineer",
+	},
+	{
+		Quote:      "Dark mode stopped being a separate project.",
+		AuthorName: "Cleo Nam",
+		AuthorRole: "Product",
+	},
+}
+
+// items returns the first n testimonials.
+func items(n int) []testimonial.Item {
+	return append([]testimonial.Item(nil), testimonials[:n]...)
 }
 
 // TestTestimonialGolden records or diffs the four Measurable goldens.
@@ -73,8 +99,8 @@ func TestTestimonialGolden(t *testing.T) {
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
 
-	one := []testimonial.Item{emptyItem()}
-	three := []testimonial.Item{emptyItem(), emptyItem(), emptyItem()}
+	one := items(1)
+	three := items(3)
 
 	cases := []struct {
 		name    string
@@ -103,15 +129,15 @@ func TestTestimonialVariantsDiffer(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 
-	items := []testimonial.Item{emptyItem(), emptyItem(), emptyItem()}
+	three := items(3)
 	single := testimonial.Render(
 		shaper,
-		testimonial.Props{Variant: testimonial.Single, Items: items, Shaper: shaper},
+		testimonial.Props{Variant: testimonial.Single, Items: three, Shaper: shaper},
 		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	grid := testimonial.Render(
 		shaper,
-		testimonial.Props{Variant: testimonial.Grid, Items: items, Shaper: shaper},
+		testimonial.Props{Variant: testimonial.Grid, Items: three, Shaper: shaper},
 		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	a := capture(t, canvasSize, scene(single, bg))
@@ -129,16 +155,16 @@ func TestTestimonialVariantsDiffer(t *testing.T) {
 func TestTestimonialLightDarkDiffer(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
-	items := []testimonial.Item{emptyItem(), emptyItem(), emptyItem()}
+	three := items(3)
 
 	light := testimonial.Render(
 		shaper,
-		testimonial.Props{Variant: testimonial.Grid, Items: items, Shaper: shaper},
+		testimonial.Props{Variant: testimonial.Grid, Items: three, Shaper: shaper},
 		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	dark := testimonial.Render(
 		shaper,
-		testimonial.Props{Variant: testimonial.Grid, Items: items, Shaper: shaper},
+		testimonial.Props{Variant: testimonial.Grid, Items: three, Shaper: shaper},
 		tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	imgLight := capture(t, canvasSize, scene(light, bg))

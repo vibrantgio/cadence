@@ -64,6 +64,39 @@ func defaultShaper(t *testing.T) *text.Shaper {
 	return tokens.DefaultTypography.DeterministicShaper()
 }
 
+// Shell draws no text of its own: everything legible in these goldens comes
+// through the composed navbar and sidebar. Both were given empty labels, on
+// the theory that font rasterisation was non-deterministic; F4.2 pinned the
+// faces by configuration and F4.3 moved every golden onto DeterministicShaper,
+// so Latin text in Roboto rasterises identically on every machine. ASCII only,
+// per F4.2 — no symbol reaches a stored image.
+//
+// With both blank the header strip drew as bare Surface and the sidebar as two
+// loose icons, so no shell golden showed where its own chrome ended and a
+// child's began. These labels are what make the slot boundaries legible.
+var (
+	navLinkLabels     = []string{"Docs", "Components"}
+	sidebarItemLabels = []string{"Overview", "Tokens"}
+)
+
+// shellNavbar returns the navbar props every shell golden composes.
+func shellNavbar(shaper *text.Shaper) navbar.Props {
+	links := make([]navbar.Link, len(navLinkLabels))
+	for i, l := range navLinkLabels {
+		links[i] = navbar.Link{Label: l}
+	}
+	return navbar.Props{Links: links, Shaper: shaper}
+}
+
+// shellSidebar returns the sidebar props every shell golden composes.
+func shellSidebar(shaper *text.Shaper) sidebar.Props {
+	items := make([]sidebar.Item, len(sidebarItemLabels))
+	for i, l := range sidebarItemLabels {
+		items[i] = sidebar.Item{Icon: testIcon(), Label: l, OnClick: func(_ layout.Context) {}}
+	}
+	return sidebar.Props{Items: items, Shaper: shaper}
+}
+
 func testIcon() layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		size := image.Pt(16, 16)
@@ -98,19 +131,12 @@ func TestShellGolden(t *testing.T) {
 	rightFill := color.NRGBA{R: 0x88, G: 0x55, B: 0x22, A: 0xff}
 	mainFill := color.NRGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff}
 
-	shmSidebarProps := sidebar.Props{
-		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
-		},
-		Shaper: shaper,
-	}
+	shmSidebarProps := shellSidebar(shaper)
 
 	shmProps := func() shell.Props {
-		links := []navbar.Link{{Label: ""}, {Label: ""}}
 		return shell.Props{
 			Layout: shell.SidebarHeaderMain,
-			Navbar: navbar.Props{Links: links, Shaper: shaper},
+			Navbar: shellNavbar(shaper),
 			Main:   fillRect(mainFill),
 		}
 	}
@@ -172,17 +198,11 @@ func TestShellCompactGolden(t *testing.T) {
 	mainFill := color.NRGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff}
 	th := densityTheme(tokens.Compact)
 
-	sbProps := sidebar.Props{
-		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
-		},
-		Shaper: shaper,
-	}
+	sbProps := shellSidebar(shaper)
 	props := shell.Props{
 		Layout:  shell.SidebarHeaderMain,
 		Sidebar: sidebar.Sidebar(rx.Of(th), sbProps),
-		Navbar:  navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
+		Navbar:  shellNavbar(shaper),
 		Main:    fillRect(mainFill),
 	}
 	w := liveWidget(t, shell.Shell(rx.Of(th), props))
@@ -342,7 +362,7 @@ func TestShellSidebarHeaderMainTabTraversal(t *testing.T) {
 		Layout: shell.SidebarHeaderMain,
 		Sidebar: sidebar.Sidebar(rx.Of(theme.Default()), sidebar.Props{
 			Items: []sidebar.Item{
-				{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
+				{Icon: testIcon(), Label: sidebarItemLabels[0], OnClick: func(_ layout.Context) {}},
 			},
 			Collapsed: rx.Of(false),
 			Shaper:    shaper,
@@ -350,7 +370,7 @@ func TestShellSidebarHeaderMainTabTraversal(t *testing.T) {
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
-				{Label: "", OnClick: func(_ layout.Context) {}},
+				{Label: navLinkLabels[0], OnClick: func(_ layout.Context) {}},
 			},
 			Shaper: shaper,
 		},
@@ -491,7 +511,7 @@ func TestShellCustomSidebarWidget(t *testing.T) {
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
-				{Label: "", OnClick: func(_ layout.Context) {}},
+				{Label: navLinkLabels[0], OnClick: func(_ layout.Context) {}},
 			},
 			Shaper: shaper,
 		},

@@ -42,6 +42,11 @@ func TestTabCyclesFocusAmongModalTags(t *testing.T) {
 		Actions:         []layout.Widget{actA, actB},
 		ActionFocusTags: []event.Tag{&clkA, &clkB},
 		OnClose:         func(_ layout.Context) {},
+		// This case lays out on the live path, so it has to say which
+		// shaper it wants: a nil Props.Shaper binds to the theme's
+		// fallback, which after F4.2 resolves against the machine's
+		// fonts (F4.4b).
+		Shaper: shaper,
 	}
 	st := newState()
 	st.pushed = true

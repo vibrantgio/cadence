@@ -46,9 +46,29 @@ func defaultShaper(t *testing.T) *text.Shaper {
 	return tokens.DefaultTypography.DeterministicShaper()
 }
 
-// fillRect is a sharp-edged solid widget used as a Body stand-in. We avoid
-// text in goldens because GPU font rasterisation is non-deterministic
-// across platforms.
+// variantTitle is the Title each variant carries. Alert draws its title in
+// the TitleMedium role and omits the title row entirely when Title is empty —
+// which every golden here did until F4.4b, so the row itself was unrecorded.
+// F4.2 pinned the faces by configuration and F4.3 moved every golden onto
+// DeterministicShaper, so Latin text in Roboto rasterises identically on every
+// machine. ASCII only, per F4.2 — no symbol reaches a stored image.
+func variantTitle(v alert.Variant) string {
+	switch v {
+	case alert.Success:
+		return "Changes saved"
+	case alert.Warning:
+		return "Unsaved changes"
+	case alert.Error:
+		return "Could not save"
+	default:
+		return "Draft autosaved"
+	}
+}
+
+// fillRect is a sharp-edged solid widget used as a Body stand-in: Body is an
+// arbitrary caller-supplied widget, so a flat block keeps it a structural
+// marker and leaves the alert's own typography — the title — to carry the
+// text.
 func fillRect(c color.NRGBA, heightDp float32) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		h := gtx.Dp(unit.Dp(heightDp))
@@ -96,9 +116,9 @@ func TestAlertGolden(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			props := alert.Props{
 				Variant: tc.variant,
-				// Empty Title avoids non-deterministic font rasterisation.
-				Body:   body,
-				Shaper: shaper,
+				Title:   variantTitle(tc.variant),
+				Body:    body,
+				Shaper:  shaper,
 			}
 			w := alert.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
@@ -115,7 +135,7 @@ func TestAlertVariantsDiffer(t *testing.T) {
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 
 	render := func(v alert.Variant) *image.RGBA {
-		props := alert.Props{Variant: v, Body: body, Shaper: shaper}
+		props := alert.Props{Variant: v, Title: variantTitle(v), Body: body, Shaper: shaper}
 		w := alert.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 		return capture(t, canvasSize, scene(w, bg))
 	}
@@ -153,8 +173,8 @@ func TestAlertLightDarkDiffer(t *testing.T) {
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 
 	for _, v := range []alert.Variant{alert.Info, alert.Success, alert.Warning, alert.Error} {
-		propsL := alert.Props{Variant: v, Body: body, Shaper: shaper}
-		propsD := alert.Props{Variant: v, Body: body, Shaper: shaper}
+		propsL := alert.Props{Variant: v, Title: variantTitle(v), Body: body, Shaper: shaper}
+		propsD := alert.Props{Variant: v, Title: variantTitle(v), Body: body, Shaper: shaper}
 		light := alert.Render(shaper, propsL, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 		dark := alert.Render(shaper, propsD, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 

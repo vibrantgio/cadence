@@ -246,8 +246,8 @@ func clickFor(clicks []widget.Clickable, i int) *widget.Clickable {
 // (S3, Density.PaddingY) padding — the horizontal 12 dp stays on the
 // spacing scale (the E1.3 input rule), the vertical padding follows
 // density. The cell width is at least 2×S3 so the Active underline is
-// visible even when the label rasterises to zero width (e.g., in
-// deterministic empty-label golden tests). Links are adjacent cells in
+// visible even when the label rasterises to zero width, which an empty
+// Link.Label does. Links are adjacent cells in
 // a row, so their hit area stays the cell bounds (extension would steal
 // a neighbour's slop).
 func linkWidget(shaper *text.Shaper, l Link, click *widget.Clickable, colors tokens.ColorTokens, sp tokens.SpacingScale, style tokens.TextStyle, d tokens.Density) layout.Widget {

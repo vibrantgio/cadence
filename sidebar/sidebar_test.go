@@ -64,6 +64,34 @@ func testIcon() layout.Widget {
 	}
 }
 
+// itemLabels names the navigation items in document order, twelve deep so the
+// overflow goldens read as twelve distinct rows rather than twelve copies.
+// They were blank until F4.4b, on the theory that font rasterisation was
+// non-deterministic; F4.2 pinned the faces by configuration and F4.3 moved
+// every golden onto DeterministicShaper, so Latin text in Roboto rasterises
+// identically on every machine. ASCII only, per F4.2 — no symbol reaches a
+// stored image.
+//
+// They are short because the expanded rail is 192 px wide and a row is the
+// icon, a gap and a MaxLines:1 label: a longer name is ellipsized, not
+// wrapped. The collapsed rail drops the label entirely, which is what makes
+// the collapsed goldens still meaningful.
+var itemLabels = []string{
+	"Overview", "Tokens", "Colour", "Type", "Density", "Motion",
+	"Elevation", "Icons", "Layout", "Forms", "Tables", "Charts",
+}
+
+// navItems returns n items with the default icon, labelled in order, and the
+// i'th marked Active when i == activeIdx (activeIdx < 0 marks none).
+func navItems(n, activeIdx int) []sidebar.Item {
+	out := make([]sidebar.Item, n)
+	for i := range out {
+		out[i] = sidebar.Item{Icon: testIcon(), Label: itemLabels[i], OnClick: func(_ layout.Context) {}}
+		out[i].Active = i == activeIdx
+	}
+	return out
+}
+
 func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		paint.FillShape(gtx.Ops, bg, clip.Rect{Max: gtx.Constraints.Max}.Op())
@@ -71,25 +99,14 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 	}
 }
 
-// TestSidebarGolden records or diffs the three Measurable goldens.
-// Labels are empty so the goldens do not depend on GPU font
-// rasterisation; the icon is a fixed colour square so it renders
-// identically across themes.
+// TestSidebarGolden records or diffs the three Measurable goldens. The icon
+// is a fixed colour square so it renders identically across themes; the labels
+// carry the typography, and light-collapsed is the assertion that the
+// collapsed rail drops them.
 func TestSidebarGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
-
-	items := func(activeIdx int) []sidebar.Item {
-		out := make([]sidebar.Item, 3)
-		for i := range out {
-			out[i] = sidebar.Item{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}}
-			if i == activeIdx {
-				out[i].Active = true
-			}
-		}
-		return out
-	}
 
 	cases := []struct {
 		name      string
@@ -105,7 +122,7 @@ func TestSidebarGolden(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			props := sidebar.Props{Items: items(tc.activeIdx), Shaper: shaper}
+			props := sidebar.Props{Items: navItems(3, tc.activeIdx), Shaper: shaper}
 			w := sidebar.Render(shaper, props, tc.collapsed, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			renderGolden(t, tc.name, tc.size, scene(w, tc.bg))
 		})
@@ -121,14 +138,7 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 
 	render := func(activeIdx int, colors tokens.ColorTokens) *image.RGBA {
-		items := []sidebar.Item{
-			{Icon: testIcon(), OnClick: func(_ layout.Context) {}},
-			{Icon: testIcon(), OnClick: func(_ layout.Context) {}},
-		}
-		if activeIdx >= 0 {
-			items[activeIdx].Active = true
-		}
-		props := sidebar.Props{Items: items, Shaper: shaper}
+		props := sidebar.Props{Items: navItems(2, activeIdx), Shaper: shaper}
 		w := sidebar.Render(shaper, props, false, colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		return capture(t, expandedSize, scene(w, bg))
 	}
@@ -201,9 +211,9 @@ func TestSidebarArrowTraversalAndEnter(t *testing.T) {
 	var fired [3]int
 	props := sidebar.Props{
 		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) { fired[0]++ }},
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) { fired[1]++ }},
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) { fired[2]++ }},
+			{Icon: testIcon(), Label: itemLabels[0], OnClick: func(_ layout.Context) { fired[0]++ }},
+			{Icon: testIcon(), Label: itemLabels[1], OnClick: func(_ layout.Context) { fired[1]++ }},
+			{Icon: testIcon(), Label: itemLabels[2], OnClick: func(_ layout.Context) { fired[2]++ }},
 		},
 		Collapsed: rx.Of(false),
 		Shaper:    defaultShaper(t),
@@ -263,7 +273,7 @@ func TestSidebarToggleDispatchesOnToggleCollapse(t *testing.T) {
 	var toggleCount int
 	props := sidebar.Props{
 		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
+			{Icon: testIcon(), Label: itemLabels[0], OnClick: func(_ layout.Context) {}},
 		},
 		Collapsed:        rx.Of(false),
 		OnToggleCollapse: func(_ layout.Context) { toggleCount++ },
@@ -305,12 +315,7 @@ func densityTheme(d tokens.Density) theme.Theme {
 // tokens.Comfortable): the toggle and item pitch drop from 36 to 28 dp.
 func TestSidebarCompactGolden(t *testing.T) {
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
-	items := make([]sidebar.Item, 3)
-	for i := range items {
-		items[i] = sidebar.Item{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}}
-	}
-	items[1].Active = true
-	props := sidebar.Props{Items: items, Collapsed: rx.Of(false), Shaper: defaultShaper(t)}
+	props := sidebar.Props{Items: navItems(3, 1), Collapsed: rx.Of(false), Shaper: defaultShaper(t)}
 	w := liveWidget(t, sidebar.Sidebar(rx.Of(densityTheme(tokens.Compact)), props))
 	renderGolden(t, "light-compact-expanded", expandedSize, scene(w, lightBG))
 }
@@ -355,7 +360,7 @@ func TestSidebarOverflowGolden(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			items := make([]sidebar.Item, n)
 			for i := range items {
-				items[i] = sidebar.Item{Icon: indexIcon(i), Label: "", OnClick: func(_ layout.Context) {}}
+				items[i] = sidebar.Item{Icon: indexIcon(i), Label: itemLabels[i], OnClick: func(_ layout.Context) {}}
 			}
 			items[n-1].Active = true
 			props := sidebar.Props{

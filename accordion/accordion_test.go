@@ -66,15 +66,26 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 	}
 }
 
-// threeSections returns a deterministic three-section fixture. Titles
-// are empty so the goldens do not depend on GPU font rasterisation;
-// the per-section body colours are unrelated to the theme so the same
-// fixture is reused for the light and dark goldens.
+// sectionTitles names the three sections in document order, so the goldens
+// show three distinct headers rather than three copies. The titles were blank
+// until F4.4b, on the theory that font rasterisation was non-deterministic;
+// F4.2 pinned the faces by configuration and F4.3 moved every golden onto
+// DeterministicShaper, so Latin text in Roboto rasterises identically on every
+// machine. ASCII only, per F4.2 — no symbol reaches a stored image.
+//
+// The header is a fixed 48 dp tall (headerHDp) whatever the title, so the
+// geometry every interaction test here computes from that number is unchanged
+// by filling them in.
+var sectionTitles = []string{"Overview", "Tokens", "Density"}
+
+// threeSections returns a deterministic three-section fixture. The
+// per-section body colours are unrelated to the theme so the same fixture is
+// reused for the light and dark goldens; the titles carry the typography.
 func threeSections() []accordion.Section {
 	return []accordion.Section{
-		{Title: "", Body: bodyRect(color.NRGBA{R: 0xff, G: 0x40, B: 0x40, A: 0xff})},
-		{Title: "", Body: bodyRect(color.NRGBA{R: 0x40, G: 0xc0, B: 0x60, A: 0xff})},
-		{Title: "", Body: bodyRect(color.NRGBA{R: 0x40, G: 0x70, B: 0xff, A: 0xff})},
+		{Title: sectionTitles[0], Body: bodyRect(color.NRGBA{R: 0xff, G: 0x40, B: 0x40, A: 0xff})},
+		{Title: sectionTitles[1], Body: bodyRect(color.NRGBA{R: 0x40, G: 0xc0, B: 0x60, A: 0xff})},
+		{Title: sectionTitles[2], Body: bodyRect(color.NRGBA{R: 0x40, G: 0x70, B: 0xff, A: 0xff})},
 	}
 }
 
@@ -118,7 +129,9 @@ func TestAccordionChevronRotatesBetweenStates(t *testing.T) {
 		// Use a Body of identical Surface colour so any pixel diff
 		// between open and closed renders must originate in the
 		// chevron, not in the body area.
-		sections := []accordion.Section{{Title: "", Body: bodyRect(tokens.DefaultLight.Surface)}}
+		// The title is identical in both renders, so it cannot contribute
+		// to the diff either; only the chevron can.
+		sections := []accordion.Section{{Title: sectionTitles[0], Body: bodyRect(tokens.DefaultLight.Surface)}}
 		props := accordion.Props{Sections: sections, Shaper: shaper}
 		// Crop to the header strip so the body area never participates
 		// in the diff regardless of how the renderer pads.
@@ -177,9 +190,9 @@ func TestAccordionArrowSpaceEnter(t *testing.T) {
 	var calls []int
 	props := accordion.Props{
 		Sections: []accordion.Section{
-			{Title: ""},
-			{Title: ""},
-			{Title: ""},
+			{Title: sectionTitles[0]},
+			{Title: sectionTitles[1]},
+			{Title: sectionTitles[2]},
 		},
 		Open:     rx.Of(map[int]bool{}),
 		OnToggle: func(_ layout.Context, idx int) { calls = append(calls, idx) },
@@ -256,9 +269,9 @@ func TestAccordionSingleOpenCollapsesPrior(t *testing.T) {
 	var calls []int
 	props := accordion.Props{
 		Sections: []accordion.Section{
-			{Title: "", Body: bodyRect(color.NRGBA{A: 0xff})},
-			{Title: "", Body: bodyRect(color.NRGBA{A: 0xff})},
-			{Title: "", Body: bodyRect(color.NRGBA{A: 0xff})},
+			{Title: sectionTitles[0], Body: bodyRect(color.NRGBA{A: 0xff})},
+			{Title: sectionTitles[1], Body: bodyRect(color.NRGBA{A: 0xff})},
+			{Title: sectionTitles[2], Body: bodyRect(color.NRGBA{A: 0xff})},
 		},
 		Open:       rx.Of(map[int]bool{0: true}),
 		OnToggle:   func(_ layout.Context, idx int) { calls = append(calls, idx) },

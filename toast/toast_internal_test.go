@@ -104,7 +104,10 @@ func TestNotifyAddsAndLifetimeExpires(t *testing.T) {
 // goroutine scheduler so the Subject's spinlock receiver runs alongside
 // the test.
 func TestNotifyReachesStackSubscription(t *testing.T) {
-	props := Props{Position: TopRight, Lifetime: time.Second}
+	// Explicit shaper: this subscribes to the live path, and a nil
+	// Props.Shaper binds to the theme's fallback, which after F4.2 resolves
+	// against the machine's fonts (F4.4b).
+	props := Props{Position: TopRight, Lifetime: time.Second, Shaper: tokens.DefaultTypography.DeterministicShaper()}
 	obs := Stack(rx.Of(theme.Default()), props)
 
 	emissions := make(chan layout.Widget, 4)

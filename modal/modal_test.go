@@ -86,11 +86,22 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 	}
 }
 
+// modalTitle is the header text every modal golden carries. It was blank
+// until F4.4b, on the theory that font rasterisation was non-deterministic;
+// F4.2 pinned the faces by configuration and F4.3 moved every golden onto
+// DeterministicShaper, so Latin text in Roboto rasterises identically on every
+// machine. ASCII only, per F4.2 — no symbol reaches a stored image.
+//
+// The header row is drawn whether or not Title is set (only the label itself
+// is skipped when empty), so filling it in moves no geometry: the close cross
+// stays where it was and the surface keeps its size.
+const modalTitle = "Discard changes?"
+
 // ---- Golden tests ----
 
-// TestModalGolden records or diffs the four Measurable goldens. Title is
-// left empty to avoid font rasterisation variance across GPUs; the cross,
-// scrim, surface, and action rectangles are all deterministic clip shapes.
+// TestModalGolden records or diffs the four Measurable goldens. The cross,
+// scrim, surface, and action rectangles are deterministic clip shapes; the
+// title carries the TitleMedium role.
 func TestModalGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
@@ -115,7 +126,7 @@ func TestModalGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := modal.Props{
-				Title:   "",
+				Title:   modalTitle,
 				Body:    body,
 				Actions: tc.actions,
 				Shaper:  shaper,
@@ -134,8 +145,8 @@ func TestModalOpenAndClosedDiffer(t *testing.T) {
 	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 
-	open := modal.Render(shaper, modal.Props{Body: body, Shaper: shaper}, true, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
-	closed := modal.Render(shaper, modal.Props{Body: body, Shaper: shaper}, false, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
+	open := modal.Render(shaper, modal.Props{Title: modalTitle, Body: body, Shaper: shaper}, true, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
+	closed := modal.Render(shaper, modal.Props{Title: modalTitle, Body: body, Shaper: shaper}, false, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
 
 	imgOpen := capture(t, canvasSize, scene(open, bg))
 	imgClosed := capture(t, canvasSize, scene(closed, bg))
@@ -168,7 +179,7 @@ func TestModalCompactGolden(t *testing.T) {
 	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
 	obs := modal.Modal(rx.Of(densityTheme(tokens.Compact)), modal.Props{
 		Open:   rx.Of(true),
-		Title:  "",
+		Title:  modalTitle,
 		Body:   body,
 		Shaper: defaultShaper(t),
 	})

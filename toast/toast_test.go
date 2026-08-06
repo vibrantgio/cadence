@@ -54,9 +54,32 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 	}
 }
 
-// TestStackGolden records or diffs the three Measurable goldens. Empty
-// text avoids non-deterministic font rasterisation; variant tint and
-// stack ordering are the load-bearing visual signal. The scenes
+// toastText is the message each level carries. Toast.Text was left empty
+// until F4.4b, on the theory that font rasterisation was non-deterministic;
+// F4.2 pinned the faces by configuration and F4.3 moved every golden onto
+// DeterministicShaper, so Latin text in Roboto rasterises identically on every
+// machine. ASCII only, per F4.2 — no symbol reaches a stored image.
+func toastText(l toast.Level) string {
+	switch l {
+	case toast.Success:
+		return "Workspace saved"
+	case toast.Warning:
+		return "Connection is slow"
+	case toast.Error:
+		return "Upload failed"
+	default:
+		return "Syncing tokens"
+	}
+}
+
+// item returns one toast of the given level, carrying that level's message.
+func item(id int64, l toast.Level) toast.Toast {
+	return toast.Toast{ID: id, Level: l, Text: toastText(l)}
+}
+
+// TestStackGolden records or diffs the three Measurable goldens. Variant tint
+// and stack ordering are the load-bearing visual signal and the text carries
+// the LabelMedium role. The scenes
 // composite over the theme's own Surface — the colour app panes are
 // painted with — so a toast fill that stops separating from real app
 // backgrounds fails the diff instead of hiding behind an arbitrary
@@ -85,9 +108,9 @@ func TestStackGolden(t *testing.T) {
 			name:  "light-three-stacked",
 			props: toast.Props{Position: toast.TopRight, Shaper: shaper},
 			items: []toast.Toast{
-				{ID: 1, Level: toast.Info},
-				{ID: 2, Level: toast.Success},
-				{ID: 3, Level: toast.Warning},
+				item(1, toast.Info),
+				item(2, toast.Success),
+				item(3, toast.Warning),
 			},
 			colors: tokens.DefaultLight,
 			bg:     lightBG,
@@ -95,7 +118,7 @@ func TestStackGolden(t *testing.T) {
 		{
 			name:   "dark-warning-toast",
 			props:  toast.Props{Position: toast.BottomRight, Shaper: shaper},
-			items:  []toast.Toast{{ID: 1, Level: toast.Warning}},
+			items:  []toast.Toast{item(1, toast.Warning)},
 			colors: tokens.DefaultDark,
 			bg:     darkBG,
 		},
@@ -116,7 +139,7 @@ func TestStackEmptyAndPopulatedDiffer(t *testing.T) {
 	props := toast.Props{Position: toast.TopRight, Shaper: shaper}
 
 	empty := toast.Render(shaper, props, nil, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
-	full := toast.Render(shaper, props, []toast.Toast{{ID: 1, Level: toast.Info}}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
+	full := toast.Render(shaper, props, []toast.Toast{item(1, toast.Info)}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
 
 	imgE := capture(t, canvasSize, scene(empty, bg))
 	imgF := capture(t, canvasSize, scene(full, bg))
@@ -134,7 +157,7 @@ func TestStackEmptyAndPopulatedDiffer(t *testing.T) {
 func TestStackPositionAnchoring(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
-	items := []toast.Toast{{ID: 1, Level: toast.Info}}
+	items := []toast.Toast{item(1, toast.Info)}
 
 	tr := toast.Render(shaper, toast.Props{Position: toast.TopRight, Shaper: shaper}, items, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
 	bl := toast.Render(shaper, toast.Props{Position: toast.BottomLeft, Shaper: shaper}, items, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)

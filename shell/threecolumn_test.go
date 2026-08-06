@@ -41,13 +41,7 @@ func TestShellThreeColumnGolden(t *testing.T) {
 	asideFill := color.NRGBA{R: 0x88, G: 0x55, B: 0x22, A: 0xff}
 	footerFill := color.NRGBA{R: 0x22, G: 0x55, B: 0x88, A: 0xff}
 
-	sbProps := sidebar.Props{
-		Items: []sidebar.Item{
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
-			{Icon: testIcon(), Label: "", OnClick: func(_ layout.Context) {}},
-		},
-		Shaper: shaper,
-	}
+	sbProps := shellSidebar(shaper)
 
 	cases := []struct {
 		name   string
@@ -66,7 +60,7 @@ func TestShellThreeColumnGolden(t *testing.T) {
 			sbW := sidebar.Render(shaper, sbProps, false, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			props := shell.Props{
 				Layout: shell.ThreeColumn,
-				Navbar: navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
+				Navbar: shellNavbar(shaper),
 				Main:   fillRect(mainFill),
 				Footer: tc.footer,
 			}
@@ -157,7 +151,7 @@ func TestShellThreeColumnTabTraversal(t *testing.T) {
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
-				{Label: "", OnClick: func(_ layout.Context) {}},
+				{Label: navLinkLabels[0], OnClick: func(_ layout.Context) {}},
 			},
 			Shaper: shaper,
 		},

@@ -72,10 +72,12 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 // rectangle and the surface contains a short label rendered in the
 // theme's Surface colour against the Text-filled bubble.
 //
-// Because Text is part of the contract, these goldens rasterise glyphs;
-// GPU font rasterisation can drift between driver/context versions. If a
-// future run flakes by a handful of pixels, diagnose driver drift before
-// re-baselining.
+// Tooltip is the one component here that F4.4b found already carrying real
+// text: Text is part of its contract, so these goldens have rasterised glyphs
+// since they were first recorded, and every case already passed Props.Shaper.
+// What they take from F4.3 is the pinned face — before it, "Save" shaped with
+// whatever the machine had, and a flake here was indistinguishable from a
+// missing font.
 func TestTooltipGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	trigger := fixedRect(color.NRGBA{R: 80, G: 160, B: 220, A: 255}, 60, 28)

@@ -59,7 +59,7 @@ func TestShellStackedPageGolden(t *testing.T) {
 	props := func(footer layout.Widget) shell.Props {
 		return shell.Props{
 			Layout: shell.StackedPage,
-			Navbar: navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
+			Navbar: shellNavbar(shaper),
 			Footer: footer,
 		}
 	}
@@ -280,7 +280,7 @@ func TestShellStackedPageTabTraversal(t *testing.T) {
 		Navbar: navbar.Props{
 			Brand: brandWidget,
 			Links: []navbar.Link{
-				{Label: "", OnClick: func(_ layout.Context) {}},
+				{Label: navLinkLabels[0], OnClick: func(_ layout.Context) {}},
 			},
 			Shaper: shaper,
 		},

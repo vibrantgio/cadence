@@ -26,7 +26,13 @@ import (
 var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
 
 const (
-	canvasW, canvasH = 720, 280
+	// The canvas grew from 720×280 in F4.4b. A tier card's natural height is
+	// its name, price row, feature list and CTA stacked; with every string
+	// blank that came to well under 240 px and 280 was generous. Filled in it
+	// does not fit, and the highlighted tier is taller again by the "Popular"
+	// chip above its name — at 280 the middle card's CTA was cut off at the
+	// canvas edge. 340 clears both.
+	canvasW, canvasH = 720, 340
 	// scene leaves an S5-equivalent margin around the pricing row so
 	// the row's outer cards retain breathing room from the canvas edge.
 	marginPx = 20
@@ -59,17 +65,47 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 	}
 }
 
-// emptyTier returns a Tier whose text fields are blank but whose
-// structural slots (features, CTA) are populated. Text labels are
-// intentionally empty so the goldens do not depend on GPU font
-// rasterisation; the checkmark glyphs, CTA fill, and card chrome carry
-// the structural differences instead.
-func emptyTier(highlighted bool) pricing.Tier {
+// tierSpec is one tier's text. The fields were all blank until F4.4b, on the
+// theory that font rasterisation was non-deterministic; F4.2 pinned the faces
+// by configuration and F4.3 moved every golden onto DeterministicShaper, so
+// Latin text in Roboto rasterises identically on every machine. ASCII only,
+// per F4.2 — no symbol reaches a stored image, and the leading checkmark on
+// each feature is a clip path the package draws itself, not a glyph.
+type tierSpec struct {
+	name     string
+	price    string
+	cadence  string
+	features []string
+}
+
+// tierSpecs are the three tiers in document order, so a three-up row reads as
+// three distinct cards rather than three copies. The feature lines are short:
+// a card in a three-up 720 px row is about 220 px wide, and each line is
+// MaxLines:1 beside a checkmark, so a longer one would be ellipsized rather
+// than wrapped.
+var tierSpecs = [3]tierSpec{
+	{"Starter", "$0", "/mo", []string{"One project", "Community help", "Light and dark"}},
+	{"Team", "$29", "/mo", []string{"Ten projects", "Email support", "Shared tokens"}},
+	{"Studio", "$99", "/mo", []string{"Unlimited work", "Priority support", "Custom ramps"}},
+}
+
+// tier returns the i'th tier, optionally highlighted.
+func tier(i int, highlighted bool) pricing.Tier {
+	spec := tierSpecs[i]
 	return pricing.Tier{
-		Features:    []string{"", "", ""},
-		CTA:         &pricing.CTA{Label: ""},
+		Name:        spec.name,
+		Price:       spec.price,
+		Cadence:     spec.cadence,
+		Features:    spec.features,
+		CTA:         &pricing.CTA{Label: "Choose"},
 		Highlighted: highlighted,
 	}
+}
+
+// threeTiers returns the full row, with the middle tier highlighted when
+// asked. Highlighting adds the package's own "Popular" chip above the name.
+func threeTiers(highlightMiddle bool) []pricing.Tier {
+	return []pricing.Tier{tier(0, false), tier(1, highlightMiddle), tier(2, false)}
 }
 
 // TestPricingGolden records or diffs the four Measurable goldens.
@@ -78,9 +114,9 @@ func TestPricingGolden(t *testing.T) {
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
 
-	three := []pricing.Tier{emptyTier(false), emptyTier(false), emptyTier(false)}
-	threeHighlighted := []pricing.Tier{emptyTier(false), emptyTier(true), emptyTier(false)}
-	single := []pricing.Tier{emptyTier(false)}
+	three := threeTiers(false)
+	threeHighlighted := threeTiers(true)
+	single := []pricing.Tier{tier(1, false)}
 
 	cases := []struct {
 		name   string
@@ -109,8 +145,8 @@ func TestPricingHighlightDiffers(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 
-	plain := pricing.Props{Tiers: []pricing.Tier{emptyTier(false), emptyTier(false), emptyTier(false)}, Shaper: shaper}
-	highlighted := pricing.Props{Tiers: []pricing.Tier{emptyTier(false), emptyTier(true), emptyTier(false)}, Shaper: shaper}
+	plain := pricing.Props{Tiers: threeTiers(false), Shaper: shaper}
+	highlighted := pricing.Props{Tiers: threeTiers(true), Shaper: shaper}
 
 	a := capture(t, canvasSize, scene(pricing.Render(shaper, plain, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable), bg))
 	b := capture(t, canvasSize, scene(pricing.Render(shaper, highlighted, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable), bg))
@@ -127,7 +163,7 @@ func TestPricingHighlightDiffers(t *testing.T) {
 func TestPricingLightDarkDiffer(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
-	tiers := []pricing.Tier{emptyTier(false), emptyTier(true), emptyTier(false)}
+	tiers := threeTiers(true)
 
 	light := pricing.Render(shaper, pricing.Props{Tiers: tiers, Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 	dark := pricing.Render(shaper, pricing.Props{Tiers: tiers, Shaper: shaper}, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)

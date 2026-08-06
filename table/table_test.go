@@ -200,33 +200,39 @@ func densityTheme(d tokens.Density) theme.Theme {
 	return th
 }
 
-// fillCell returns a Column.Cell that fills its cell box with a flat
-// colour. Deterministic (no fonts), so density goldens diff on geometry
-// alone: row pitch and header height are exactly ControlHeight.
-func fillCell(c color.NRGBA) func(int) layout.Widget {
-	return func(int) layout.Widget {
-		return func(gtx layout.Context) layout.Dimensions {
-			paint.FillShape(gtx.Ops, c, clip.Rect{Max: gtx.Constraints.Max}.Op())
-			return layout.Dimensions{Size: gtx.Constraints.Max}
-		}
+// rowNames is the text the middle column draws, one entry per row index. It
+// and the headers were empty until F4.4b, on the theory that font
+// rasterisation was non-deterministic; F4.2 pinned the faces by configuration
+// and F4.3 moved every golden onto DeterministicShaper, so Latin text in
+// Roboto rasterises identically on every machine. ASCII only, per F4.2 — no
+// symbol reaches a stored image, and the sort chevron is a clip path the
+// package draws itself.
+var rowNames = []string{"Tokens", "Density", "Elevation", "Motion"}
+
+// textCell renders column text through the package's own RenderTextCell, the
+// helper a caller is meant to reach for — so the goldens now exercise the
+// cell's own padding and clamping rather than a flat colour block.
+func textCell(shaper *text.Shaper, f func(int) string) func(int) layout.Widget {
+	return func(item int) layout.Widget {
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypography.BodyMedium, f(item))
 	}
 }
 
 // TestTableGolden records or diffs one golden per density through the
 // LIVE pipeline (the static Render path is frozen at tokens.Comfortable).
-// Headers are empty to avoid GPU font rasterisation differences; the
-// sort chevron on the active column is a deterministic clip path. The
-// two goldens differ only in the density snapshot: header and rows land
-// at 36 dp pitch Comfortable, 28 dp Compact.
+// The sort chevron on the active column is a deterministic clip path; the
+// headers draw in the LabelLarge role and the cells in BodyMedium. The two
+// goldens differ only in the density snapshot: header and rows land at 36 dp
+// pitch Comfortable, 28 dp Compact.
 func TestTableGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	size := image.Pt(360, 200)
 
 	cols := []table.Column[int]{
-		{Header: "", Width: unit.Dp(80), Sortable: true, Cell: fillCell(color.NRGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff})},
-		{Header: "", Sortable: true, Cell: fillCell(color.NRGBA{R: 0x88, G: 0x55, B: 0x22, A: 0xff})},
-		{Header: "", Width: unit.Dp(96), Cell: fillCell(color.NRGBA{R: 0x22, G: 0x55, B: 0x88, A: 0xff})},
+		{Header: "ID", Width: unit.Dp(80), Sortable: true, Cell: textCell(shaper, func(i int) string { return strconv.Itoa(i + 1) })},
+		{Header: "Name", Sortable: true, Cell: textCell(shaper, func(i int) string { return rowNames[i] })},
+		{Header: "Steps", Width: unit.Dp(96), Cell: textCell(shaper, func(i int) string { return strconv.Itoa(4 * (i + 1)) })},
 	}
 
 	cases := []struct {

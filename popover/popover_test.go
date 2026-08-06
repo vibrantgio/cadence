@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"gioui.org/f32"
+	"gioui.org/font"
 	"gioui.org/gpu/headless"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/pointer"
@@ -20,7 +21,9 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/unit"
+	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/popover"
@@ -52,6 +55,56 @@ func fixedRect(c color.NRGBA, widthDp, heightDp float32) layout.Widget {
 	}
 }
 
+// defaultShaper returns the shaper every golden here draws with: the default
+// typography's faces pinned, system fonts off, so the stored images are the
+// same on every machine. A golden test pins its faces with
+// DeterministicShaper; application code takes the fallback Shaper. See
+// AGENTS.md.
+func defaultShaper(t *testing.T) *text.Shaper {
+	t.Helper()
+	return tokens.DefaultTypography.DeterministicShaper()
+}
+
+// textContent returns the popover's content: a short line of real text in the
+// BodyMedium role.
+//
+// Popover, like card, carries no Shaper in its Props because it draws no text
+// of its own — Anchor and Content are both caller-supplied widgets, so the
+// typeface inside a popover is settled by whoever builds them. This is that
+// caller. Before F4.4b the content was a flat 80×36 block, which pinned the
+// surface's geometry but said nothing about how it wraps around content that
+// has a text baseline in it. ASCII only, per F4.2 — no symbol reaches a stored
+// image.
+//
+// The string length is load-bearing, and deliberately near the limit: the
+// surface grows to fit it, and Left placement puts that surface between the
+// centred anchor and the canvas edge. "Sort ascending" leaves 3 px of
+// clearance there. A longer line would run off the left of left-dark, where
+// the canvas cannot grow — the interaction tests below address the anchor by
+// hardcoded coordinates in this 320×240 frame.
+func textContent(t *testing.T, fg color.NRGBA) layout.Widget {
+	t.Helper()
+	shaper := defaultShaper(t)
+	style := tokens.DefaultTypography.BodyMedium
+	return func(gtx layout.Context) layout.Dimensions {
+		m := op.Record(gtx.Ops)
+		paint.ColorOp{Color: fg}.Add(gtx.Ops)
+		material := m.Stop()
+
+		f := font.Font{Typeface: font.Typeface(style.Typeface)}
+		if style.Weight != 0 {
+			f.Weight = tokens.FontWeight(style.Weight)
+		}
+		l := widget.Label{MaxLines: 1}
+		if style.LineHeight != 0 {
+			l.LineHeight = unit.Sp(style.LineHeight)
+			l.LineHeightScale = 1
+		}
+		gtx.Constraints.Min = image.Point{}
+		return l.Layout(gtx, shaper, f, unit.Sp(style.Size), "Sort ascending", material)
+	}
+}
+
 // scene renders w over a flat background sized to the constraints.
 func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
@@ -64,11 +117,10 @@ func scene(w layout.Widget, bg color.NRGBA) layout.Widget {
 
 // TestPopoverGolden records or diffs the four Measurable goldens — one
 // per Placement, alternating light and dark theme. The anchor is a small
-// solid rectangle and the content is a larger solid rectangle; the tail
+// solid rectangle and the content is a line of real text; the tail
 // triangle is the only diagonal-edged shape in each frame.
 func TestPopoverGolden(t *testing.T) {
 	anchor := fixedRect(color.NRGBA{R: 80, G: 160, B: 220, A: 255}, 60, 28)
-	content := fixedRect(color.NRGBA{R: 120, G: 120, B: 120, A: 255}, 80, 36)
 
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	darkBG := color.NRGBA{R: 20, G: 20, B: 20, A: 255}
@@ -88,7 +140,7 @@ func TestPopoverGolden(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			props := popover.Props{
 				Anchor:    anchor,
-				Content:   content,
+				Content:   textContent(t, tc.colors.Text),
 				Placement: tc.placement,
 			}
 			w := popover.Render(props, true, tc.colors, tokens.Spacing, sharpRadius)
@@ -102,9 +154,8 @@ func TestPopoverGolden(t *testing.T) {
 // silently no-ops.
 func TestPopoverOpenAndClosedDiffer(t *testing.T) {
 	anchor := fixedRect(color.NRGBA{R: 80, G: 160, B: 220, A: 255}, 60, 28)
-	content := fixedRect(color.NRGBA{R: 120, G: 120, B: 120, A: 255}, 80, 36)
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
-	props := popover.Props{Anchor: anchor, Content: content, Placement: popover.Top}
+	props := popover.Props{Anchor: anchor, Content: textContent(t, tokens.DefaultLight.Text), Placement: popover.Top}
 
 	open := popover.Render(props, true, tokens.DefaultLight, tokens.Spacing, sharpRadius)
 	closed := popover.Render(props, false, tokens.DefaultLight, tokens.Spacing, sharpRadius)
