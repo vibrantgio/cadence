@@ -21,21 +21,13 @@ type exception struct {
 }
 
 // exceptions lists the deliberate literal-colour sites in this repo.
+//
+// alert/alert.go and toast/toast.go were listed here until F4.6, each
+// carrying a byte-identical copy of the same four Tailwind values for the
+// success and warning accents. spectrum/tokens now derives both roles —
+// hue-fixed ramps and pins, like error — so both entries are gone and the
+// only exception left is a deliberate alpha composite.
 var exceptions = []exception{
-	{
-		path: "alert/alert.go",
-		// Success/warning accents (Tailwind green-700/400, amber-700/400)
-		// hard-coded because spectrum's tokens carry no status roles yet.
-		// Candidate for promotion to spectrum tokens.
-		reason: "status palette pending a spectrum token role",
-	},
-	{
-		path: "toast/toast.go",
-		// The same green/amber status palette as alert/alert.go,
-		// duplicated. Same story: candidate for promotion to spectrum
-		// tokens, which would also deduplicate the two copies.
-		reason: "status palette pending a spectrum token role",
-	},
 	{
 		path: "modal/modal.go",
 		// The scrim is black at 50% alpha in both themes by material

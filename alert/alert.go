@@ -7,15 +7,17 @@
 // layout.Widget. Source is intentionally short and free of opaque
 // configuration — copy it into your own app and modify as needed.
 //
-// Two things about the variants are worth knowing before you theme them.
-// Only Info and Error read a token role — Primary and Error. Success and
-// Warning have no role in the token set yet, so they fall back to Tailwind
-// green and amber shades defined in this file, chosen between light and
-// dark by comparing the luminance of Surface against Text. A custom
-// theme's colours therefore reach two of the four variants and not the
-// other two. And all four draw the same right-pointing chevron glyph,
-// differing only in colour; the per-variant icon set arrives with
-// prism/icon.
+// One thing about the variants is worth knowing before you theme them: all
+// four draw the same right-pointing chevron glyph, differing only in
+// colour; the per-variant icon set arrives with prism/icon.
+//
+// Each variant's accent is a pinned token role — Primary, Success, Warning
+// and Error — so a custom theme's colours reach all four. Until F4.6 the
+// last two were Tailwind green and amber literals defined in this file,
+// picked between light and dark by comparing the luminance of Surface
+// against Text; spectrum's token set now carries hue-fixed success and
+// warning ramps, so the local palette and the light-mode sniff are both
+// gone.
 //
 // The banner fills the constraints it is given rather than shrinking to
 // its content — it reports gtx.Constraints.Max as its size — so an Alert
@@ -219,10 +221,9 @@ func drawChevron(gtx layout.Context, cx, cy, sz int, col color.NRGBA) {
 	paint.FillShape(gtx.Ops, col, clip.Outline{Path: p.End()}.Op())
 }
 
-// accentColor maps Variant to its accent colour. Info and Error read directly
-// from token roles so they flip automatically with light/dark; Success and
-// Warning fall back to locally-defined Tailwind palettes (no token role
-// exists for those semantics yet).
+// accentColor maps Variant to its pinned token role. All four read a role
+// off the token set, so all four flip with light/dark and follow whatever
+// seed, palette or high-contrast variant the theme is emitting.
 func accentColor(v Variant, c tokens.ColorTokens) color.NRGBA {
 	switch v {
 	case Info:
@@ -230,37 +231,12 @@ func accentColor(v Variant, c tokens.ColorTokens) color.NRGBA {
 	case Error:
 		return c.Error
 	case Success:
-		return localAccent(c, green700, green400)
+		return c.Success
 	case Warning:
-		return localAccent(c, amber700, amber400)
+		return c.Warning
 	default:
 		return c.Primary
 	}
-}
-
-// Locally-defined Tailwind palettes for variants without a token role.
-var (
-	green700 = color.NRGBA{0x15, 0x80, 0x3d, 0xff}
-	green400 = color.NRGBA{0x4a, 0xde, 0x80, 0xff}
-	amber700 = color.NRGBA{0xb4, 0x54, 0x09, 0xff}
-	amber400 = color.NRGBA{0xfb, 0xbf, 0x24, 0xff}
-)
-
-// localAccent picks the light- or dark-mode shade based on the relative
-// luminance of Surface vs Text in the active token set.
-func localAccent(c tokens.ColorTokens, lightShade, darkShade color.NRGBA) color.NRGBA {
-	if isLightMode(c) {
-		return lightShade
-	}
-	return darkShade
-}
-
-func isLightMode(c tokens.ColorTokens) bool {
-	return luminance(c.Surface) > luminance(c.Text)
-}
-
-func luminance(c color.NRGBA) int {
-	return int(c.R) + int(c.G) + int(c.B)
 }
 
 // tintSurface overlays accent onto surface at ~12% alpha. The result has

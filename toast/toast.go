@@ -526,10 +526,13 @@ func fadeAlpha(it activeToast, lifetime, fade time.Duration, now time.Time) floa
 	return tw.At(frame)
 }
 
-// accentColor maps Level to its accent colour. Info and Error read
-// directly from token roles so they flip automatically with light/dark;
-// Success and Warning fall back to locally-defined Tailwind palettes (no
-// token role exists for those semantics yet) — mirroring cadence/alert.
+// accentColor maps Level to its pinned token role — mirroring
+// cadence/alert. All four read a role off the token set, so all four flip
+// with light/dark and follow whatever seed, palette or high-contrast
+// variant the theme is emitting. Until F4.6 Success and Warning were
+// Tailwind green and amber literals, duplicated byte-for-byte between this
+// file and alert/alert.go; spectrum's hue-fixed success and warning ramps
+// replaced both copies.
 func accentColor(l Level, c tokens.ColorTokens) color.NRGBA {
 	switch l {
 	case Info:
@@ -537,29 +540,13 @@ func accentColor(l Level, c tokens.ColorTokens) color.NRGBA {
 	case Error:
 		return c.Error
 	case Success:
-		return localAccent(c, green700, green400)
+		return c.Success
 	case Warning:
-		return localAccent(c, amber700, amber400)
+		return c.Warning
 	default:
 		return c.Primary
 	}
 }
-
-var (
-	green700 = color.NRGBA{0x15, 0x80, 0x3d, 0xff}
-	green400 = color.NRGBA{0x4a, 0xde, 0x80, 0xff}
-	amber700 = color.NRGBA{0xb4, 0x54, 0x09, 0xff}
-	amber400 = color.NRGBA{0xfb, 0xbf, 0x24, 0xff}
-)
-
-func localAccent(c tokens.ColorTokens, lightShade, darkShade color.NRGBA) color.NRGBA {
-	if luminance(c.Surface) > luminance(c.Text) {
-		return lightShade
-	}
-	return darkShade
-}
-
-func luminance(c color.NRGBA) int { return int(c.R) + int(c.G) + int(c.B) }
 
 // tintSurface blends 20% of the accent over the given base. Strong
 // enough that the fill itself separates from Surface-painted panes;
