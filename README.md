@@ -11,8 +11,15 @@ Every one of them is the part you would otherwise write by hand and get subtly
 wrong: the modal that traps Tab and lets Escape out, the popover that dismisses
 when you open another one, the tooltip that is the only tooltip on screen, the
 table that lays out only the rows you can see. Each pattern reads its visual
-values from prism's theme observable, so a window follows the OS between light
-and dark with no application code.
+values from [spectrum](https://github.com/vibrantgio/spectrum)'s theme
+observable, and the theme carries the whole look: colour, typography, density,
+elevation and motion. A window follows the OS between light and dark with no
+application code; switching an app to Compact density resizes the navbar,
+sidebar items, tabs, pagination and table rows as a theme change, not a sweep;
+overlay surfaces name their rung on the elevation ladder and fill from
+`SurfaceAt` — the modal and toast at level 2, tonal in both modes — with cast
+shadows reserved, per ADR-005, for the surfaces that float and can leave (the
+toast; not the card).
 
 Every package has the same two entry points, and the split is deliberate:
 
@@ -28,7 +35,11 @@ Every package has the same two entry points, and the split is deliberate:
   draws one frame with no event handling. That is what the golden-image tests
   drive, and what to use for static rendering. `shell` adds
   `RenderThreeColumn` and `RenderStackedPage` for the layouts whose slots are
-  streams in the live form.
+  streams in the live form. These signatures are frozen golden surfaces — they
+  still take the legacy `tokens.TypeScale`, and the pending major (F3.3 of the
+  [org plan](https://github.com/vibrantgio/.github), planned) re-cuts them to
+  `TextStyle` + `Density`. Drive patterns through their live entry points
+  unless you are rendering a static frame.
 
 Typography is theme-owned: in the live form every pattern that draws text
 shapes with the theme's `Typography.Shaper()` and the Material Design 3 text
@@ -45,7 +56,8 @@ couple of hundred lines, and the props struct is not trying to anticipate you.
 
 Tier 4 of the stack — `mvu → spectrum → prism → pulse → cadence → markdown` —
 alongside [markdown](https://github.com/vibrantgio/markdown). cadence imports
-`button`, `coordination`, `layout`, `list`, `theme` and `tokens` from
+`theme` and `tokens` from [spectrum](https://github.com/vibrantgio/spectrum),
+`button`, `coordination`, `icon`, `layout` and `list` from
 [prism](https://github.com/vibrantgio/prism), plus `depth` and `tween` from
 [pulse](https://github.com/vibrantgio/pulse); [mvu](https://github.com/vibrantgio/mvu)
 it uses only indirectly, through those. Nothing inside the design system
@@ -70,25 +82,25 @@ github.com/reactivego/rx v0.3.0 and Go 1.25.1.
 | `navbar` | A horizontal surface bar with three slots — leading brand, centred links, trailing actions. The active link carries a Primary underline. |
 | `sidebar` | A collapsible vertical column that swaps between an expanded width (icon + label) and a collapsed width (icon only). The active item is tinted Primary. |
 | `tabs` | A tab strip with a Primary underline on the selection, plus the content panel below it. Click, Arrow-Left/Right (wrapping), Home and End all change the selection. |
-| `breadcrumb` | A chevron-separated row of location segments. The last renders in OnSurface as the current location; the ones before it are clickable. |
+| `breadcrumb` | A chevron-separated row of location segments. The last renders as the current location in a deep neutral text step; the ones before it are clickable. |
 
 **Data and content** — the things that hold a screenful of stuff.
 
 | Package | |
 | --- | --- |
-| `table` | The sortable, virtualised data table, built on `prism/list`: only the visible rows lay out, whatever the row count. Sort and filter are external — the `Items` observable emits already-sorted, already-filtered slices and the header surfaces intent through `OnSort`. |
+| `table` | The sortable, virtualised data table, built on `prism/list`: only the visible rows lay out, whatever the row count. Sort and filter are external — the `Items` observable emits already-sorted, already-filtered slices and the header surfaces intent through `OnSort`. Row heights follow the theme's density. |
 | `pagination` | A row of numbered page buttons flanked by prev/next chevrons, the current page highlighted Primary/OnPrimary. |
-| `card` | A rounded surface with optional Header / Body / Footer slots, in an outlined (1 dp stroke) or elevated variant — the latter shadowed through `pulse/depth`. |
+| `card` | A rounded surface with optional Header / Body / Footer slots, in an outlined (1 dp stroke on the level-1 surface) or elevated variant — the latter a level-2 tonal fill. A card is raised in place, not floating, so neither variant casts a shadow (ADR-005; E2.2 retired the elevated card's `pulse/depth` call). |
 | `accordion` | A vertical stack of collapsible sections with a rotating chevron. `SingleOpen` makes activating a closed section first toggle every open peer, so a parent's flip-the-bool handler converges on single-open with no extra bookkeeping. |
 
 **Overlays and feedback** — the things that draw over everything else.
 
 | Package | |
 | --- | --- |
-| `modal` | A centred elevated dialog over a full-window scrim: header, padded body, footer actions. Escape and a backdrop click close it, Tab and Shift+Tab cycle inside it and cannot escape to the background, and only the topmost modal on the exported `Stack` receives input. Footer actions own their own focus tags, so a focused action shows exactly one ring. |
+| `modal` | A centred dialog over a full-window scrim, its surface a level-2 fill from the elevation ladder: header, padded body, footer actions. Escape and a backdrop click close it, Tab and Shift+Tab cycle inside it and cannot escape to the background, and only the topmost modal on the exported `Stack` receives input. Footer actions own their own focus tags, so a focused action shows exactly one ring. |
 | `popover` | An anchored elevated surface with a triangular tail pointing at a caller-supplied anchor. Outside-click dismissal and popover-vs-popover arbitration run through `prism/coordination` — opening a second popover dismisses the first. |
-| `tooltip` | A hover/focus annotation next to a trigger after a delay (`DefaultDelay`, 500 ms). Arbitration keeps exactly one tooltip visible across the window. |
-| `toast` | A position-anchored column of transient notifications. Application code calls the package-scoped `Notify`; any active `Stack` renders the queue in its chosen corner and each toast fades out through `pulse/tween` at the end of its `Lifetime` (`DefaultLifetime`, 4 s). |
+| `tooltip` | A hover/focus annotation next to a trigger after a delay. `DefaultDelay` resolves from the token motion scale's `DurXSlow` stop (500 ms), and the live form re-times from the theme's `Motion` observable. Arbitration keeps exactly one tooltip visible across the window. |
+| `toast` | A position-anchored column of transient notifications, each on a level-2 surface with a `pulse/depth` cast shadow — a toast floats and can leave, which is exactly what ADR-005 reserves shadows for. Application code calls the package-scoped `Notify`; any active `Stack` renders the queue in its chosen corner and each toast fades out through `pulse/tween` across the theme's `DurSlow` stop at the end of its `Lifetime` (`DefaultLifetime`, 4 s). |
 | `alert` | A tinted-surface banner with a leading variant icon, a title and an arbitrary body widget. Info, Success, Warning, Error. |
 
 **Marketing** — the landing-page sections, for the app's own front door.
@@ -109,31 +121,32 @@ run ./modal/gallery`.
 Patterns compose by handing one pattern's stream to another's slot. This is
 `landing.go` from
 [workbench/sitedocs](https://github.com/vibrantgio/workbench/tree/master/sitedocs)
-— the four marketing patterns mounted as the scrolling sections of a
+— the marketing patterns mounted as the scrolling sections of a
 `StackedPage` shell, which pins the navbar, owns the scroll region and re-emits
-whenever any section emits:
+whenever any section emits. Note that nothing passes a shaper — the theme
+carries the typography:
 
 ```go
 gap := rx.Of[layout.Widget](pllayout.VSpacer(sectionGapDp))
 return shell.Shell(th, shell.Props{
 	Layout:          shell.StackedPage,
 	ContentMaxWidth: contentMaxWidthDp, // centred reading column; navbar stays full-bleed
-	Navbar:          navbarProps(th, shaper, pageHome),
+	Navbar:          navbarProps(mirrorTokens(th), pageHome),
 	Sections: []rx.Observable[layout.Widget]{
-		hero.Hero(th, heroContent(shaper, gotoDocs, gotoAbout)),
+		hero.Hero(th, heroContent(gotoDocs, gotoAbout)),
 		gap,
 		feature.Feature(th, featureContent()),
 		gap,
-		pricing.Pricing(th, pricingContent(shaper)),
+		pricing.Pricing(th, pricingContent()),
 		gap,
-		testimonial.Testimonial(th, testimonialContent(shaper)),
+		testimonial.Testimonial(th, testimonialContent()),
 	},
 })
 ```
 
 The props are plain data — `hero.Props{Eyebrow, Title, Subtitle, PrimaryCTA,
-SecondaryCTA, Shaper}`, `feature.Props{Columns, Items}` — so the copy lives in
-its own file and the layout file stays structural.
+SecondaryCTA}`, `feature.Props{Columns, Items}` — so the copy lives in its own
+file and the layout file stays structural.
 
 A table is columns plus a row stream. This is condensed from `maincontent.go`
 in
@@ -152,7 +165,6 @@ columns := []table.Column[symbolRow]{
 tableObs := table.Table(th, table.Props[symbolRow]{
 	Columns: columns,
 	Items:   rowsObs, // already paged, sorted and filtered by the consumer
-	Shaper:  shaper,
 })
 ```
 
@@ -181,7 +193,7 @@ shell's dimensions — the modal scrim and the toast column both need the whole
 window. Both `feeds` and `watchlist` do exactly this:
 
 ```go
-toastObs := toast.Stack(th, toast.Props{Position: toast.TopRight, Shaper: shaper})
+toastObs := toast.Stack(th, toast.Props{Position: toast.TopRight})
 
 return rx.Map(rx.CombineLatest3(shellObs, modalObs, toastObs),
 	func(n rx.Tuple3[layout.Widget, layout.Widget, layout.Widget]) layout.Widget {
@@ -237,8 +249,9 @@ Honest about what does not work yet:
   `table` all take their dynamic state as observables; pagination is the
   outlier.
 - **Overlays open and close instantly.** `modal`, `popover` and `tooltip` have
-  no entrance or exit transition; only `toast` animates, and only its fade-out.
-  Integrating pulse across the overlays is deferred.
+  no entrance or exit transition; only `toast` animates, and only its fade-out
+  (whose duration does at least resolve from the theme's motion scale now).
+  Integrating pulse's motion primitives across the overlays is still deferred.
 - **No responsive behaviour.** `feature`, `pricing` and `testimonial` do not
   collapse to fewer columns or a vertical stack on a narrow window, and
   `popover` does not flip or reflow when the chosen `Placement` would clip the
