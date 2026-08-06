@@ -309,6 +309,85 @@ func TestSidebarCompactGolden(t *testing.T) {
 	renderGolden(t, "light-compact-expanded", expandedSize, scene(w, lightBG))
 }
 
+// indexIcon returns a 16×16 filled square whose colour varies with the
+// item index, so rows are visually distinguishable in the overflow
+// goldens: a scrolled-to-bottom viewport cannot be mistaken for the top.
+func indexIcon(i int) layout.Widget {
+	c := color.NRGBA{R: uint8(20 * i), G: 0x80, B: 0xf6, A: 0xff}
+	return func(gtx layout.Context) layout.Dimensions {
+		size := image.Pt(16, 16)
+		paint.FillShape(gtx.Ops, c, clip.Rect{Max: size}.Op())
+		return layout.Dimensions{Size: size}
+	}
+}
+
+// TestSidebarOverflowGolden records or diffs the FX.6 scroll-region
+// goldens: 12 items overflow the 256 px canvas at every combination of
+// width and density (comfortable fits ~6 rows under the toggle, compact
+// ~8). Each case scrolls to the bottom through the live pipeline's
+// pointer path before capturing, and the last item is Active, so the
+// golden shows the previously unreachable end of the list — the
+// highlighted row against the bottom edge. A pixel diff against the
+// unscrolled frame guards the scroll itself: if the wheel event stopped
+// moving the list, the golden would silently pin the top view.
+func TestSidebarOverflowGolden(t *testing.T) {
+	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
+	const n = 12
+
+	cases := []struct {
+		name      string
+		collapsed bool
+		density   tokens.Density
+		size      image.Point
+	}{
+		{"light-overflow-expanded-comfortable", false, tokens.Comfortable, expandedSize},
+		{"light-overflow-collapsed-comfortable", true, tokens.Comfortable, collapsedSize},
+		{"light-overflow-expanded-compact", false, tokens.Compact, expandedSize},
+		{"light-overflow-collapsed-compact", true, tokens.Compact, collapsedSize},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			items := make([]sidebar.Item, n)
+			for i := range items {
+				items[i] = sidebar.Item{Icon: indexIcon(i), Label: "", OnClick: func(_ layout.Context) {}}
+			}
+			items[n-1].Active = true
+			props := sidebar.Props{
+				Items:     items,
+				Collapsed: rx.Of(tc.collapsed),
+				Shaper:    defaultShaper(t),
+			}
+			w := liveWidget(t, sidebar.Sidebar(rx.Of(densityTheme(tc.density)), props))
+
+			r := new(gioinput.Router)
+			ops := new(op.Ops)
+			driveFrame(w, ops, r, tc.size)
+			driveFrame(w, ops, r, tc.size)
+			before := capture(t, tc.size, scene(w, lightBG))
+
+			// One wheel event larger than the total overflow; the list
+			// clamps at the end. The frame that absorbs the scroll still
+			// draws from the old first index; the settled frame follows.
+			r.Queue(pointer.Event{
+				Kind:     pointer.Scroll,
+				Position: f32.Pt(24, 128),
+				Scroll:   f32.Pt(0, 600),
+				Source:   pointer.Mouse,
+			})
+			driveFrame(w, ops, r, tc.size)
+			driveFrame(w, ops, r, tc.size)
+
+			after := capture(t, tc.size, scene(w, lightBG))
+			if before != nil && after != nil {
+				if d := pixelDiff(before, after); d == 0 {
+					t.Fatalf("scroll event moved nothing: overflowing list did not scroll")
+				}
+			}
+			renderGolden(t, tc.name, tc.size, scene(w, lightBG))
+		})
+	}
+}
+
 // ---- golden harness (inlined; prism/internal/golden is not importable
 // from outside the prism module tree) ----
 

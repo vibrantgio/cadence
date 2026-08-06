@@ -11,17 +11,27 @@
 //
 // The column's width is not negotiable: 192 dp expanded and 48 dp
 // collapsed, both fixed constants in this file that ignore the horizontal
-// constraint entirely. Height is whatever it is handed. Collapsed is an
+// constraint entirely. Height is whatever it is handed. FX.6 considered
+// making the widths respond — to density, or to the horizontal
+// constraint — and kept them fixed: E1.4 scopes density to vertical
+// rhythm (control heights), and clamping to the constraint would
+// introduce a third, unpredictable width where the expanded↔collapsed
+// swap between two known numbers is the pattern's contract. Vertical
+// overflow was irrecoverable (content unreachable, hence the scroll
+// region below); horizontal space is the caller's explicit allocation,
+// and a caller wanting a different rail width copies the file, per the
+// Composition contract above. Collapsed is an
 // rx.Observable[bool] the caller owns — the sidebar renders that state
 // and does not hold it — and OnToggleCollapse is the request to change
 // it, so wiring the affordance to nothing leaves a sidebar that cannot
 // collapse.
 //
 // Items are stacked at the density's row pitch — exactly
-// Density.ControlHeight (E1.4; 36 dp Comfortable, 28 dp Compact) — with
-// no scroll region: a list longer than the column is tall simply paints
-// past the bottom edge. Wrap the pattern in your own scroll, or copy the
-// file and swap the loop in drawSidebar for a prism/list. Items are
+// Density.ControlHeight (E1.4; 36 dp Comfortable, 28 dp Compact) — in a
+// prism/list scroll region filling the column below the toggle (FX.6):
+// a list longer than the column is tall scrolls by wheel or touch
+// instead of painting past the bottom edge. No scrollbar is drawn — the
+// bare list.Layout, the same idiom cadence/table's body uses. Items are
 // stacked full-width rows, so each row's hit area stays the row bounds
 // (extending it to the 44 dp pointer floor would steal the neighbouring
 // row's slop).
@@ -30,8 +40,10 @@
 // takes focus, and Arrow-Up/Down move between them, skipping the ones
 // without; the collapse affordance deliberately registers no focus tag —
 // it answers pointer clicks only — so that Arrow traversal stays bounded
-// by the item list. Its glyph is a placeholder filled square until
-// prism/icon lands.
+// by the item list. The scroll region virtualizes offscreen rows, so a
+// row's focus tag is registered only while it is laid out: Arrow
+// traversal reaches the rows currently in view. Its glyph is a
+// placeholder filled square until prism/icon lands.
 package sidebar
 
 import (
@@ -51,6 +63,7 @@ import (
 	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
+	"github.com/vibrantgio/prism/list"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
@@ -91,8 +104,9 @@ type Props struct {
 // SpacingScale tops out at S24 = 96 dp, so the "~S48" expanded width
 // cited in PLAN G4.3b is materialised as a local 192 dp constant
 // (≈ 4 × S12) rather than a new spacing-token field. Widths do not
-// follow density (the column contract is fixed); the item and toggle
-// heights do — both are exactly Density.ControlHeight (E1.4 row rule).
+// follow density (the column contract is fixed; FX.6 revisited and kept
+// this — see the package comment); the item and toggle heights do —
+// both are exactly Density.ControlHeight (E1.4 row rule).
 const (
 	expandedDp  = 192
 	collapsedDp = 48
@@ -139,6 +153,7 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	inputs := rx.CombineLatest2(resolved, collapsed)
 	return rx.Defer(func() rx.Observable[layout.Widget] {
 		clicks := make([]widget.Clickable, len(props.Items))
+		state := list.NewState()
 		var toggleTag toggleTag
 		return rx.Map(inputs, func(next rx.Tuple2[resolvedTokens, bool]) layout.Widget {
 			tok, col := next.First, next.Second
@@ -150,7 +165,7 @@ func Sidebar(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 			}
 			return func(gtx layout.Context) layout.Dimensions {
 				processInput(gtx, props, clicks, &toggleTag)
-				return drawSidebar(gtx, shaper, props, clicks, &toggleTag, col, tok.color, tok.spacing, tok.label, tok.density)
+				return drawSidebar(gtx, shaper, props, clicks, &toggleTag, state, col, tok.color, tok.spacing, tok.label, tok.density)
 			}
 		})
 	})
@@ -173,8 +188,9 @@ func Render(
 	sp tokens.SpacingScale,
 	ts tokens.TypeScale,
 ) layout.Widget {
+	state := list.NewState()
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawSidebar(gtx, shaper, props, nil, nil, collapsed, colors, sp, tokens.TextStyle{Size: ts.LabelLarge}, tokens.Comfortable)
+		return drawSidebar(gtx, shaper, props, nil, nil, state, collapsed, colors, sp, tokens.TextStyle{Size: ts.LabelLarge}, tokens.Comfortable)
 	}
 }
 
@@ -246,6 +262,7 @@ func drawSidebar(
 	props Props,
 	clicks []widget.Clickable,
 	tt *toggleTag,
+	state *list.State,
 	collapsed bool,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
@@ -267,15 +284,27 @@ func drawSidebar(
 	toggleH := gtx.Dp(unit.Dp(d.ControlHeight))
 	drawToggle(gtx, tt, image.Pt(w, toggleH), colors)
 
-	// Items stacked vertically below the toggle at the density's row
-	// pitch (E1.4 row rule: exactly ControlHeight).
-	itemH := gtx.Dp(unit.Dp(d.ControlHeight))
-	for i, it := range props.Items {
-		off := image.Pt(0, toggleH+i*itemH)
-		stk := op.Offset(off).Push(gtx.Ops)
-		drawItem(gtx, shaper, it, clickFor(clicks, i), image.Pt(w, itemH), collapsed, colors, sp, style)
-		stk.Pop()
+	// Items below the toggle, in a prism/list scroll region filling the
+	// rest of the column (FX.6) — the bare list.Layout, like table's
+	// body: wheel/touch scrolling, no scrollbar. Each row is a full-width
+	// row at the density's pitch (E1.4 row rule: exactly ControlHeight,
+	// which is what list.RowHeight resolves to).
+	listH := h - toggleH
+	if listH <= 0 {
+		return layout.Dimensions{Size: size}
 	}
+	itemH := gtx.Dp(list.RowHeight(d))
+	stk := op.Offset(image.Pt(0, toggleH)).Push(gtx.Ops)
+	lGtx := gtx
+	lGtx.Constraints = layout.Exact(image.Pt(w, listH))
+	idx := make([]int, len(props.Items))
+	for i := range idx {
+		idx[i] = i
+	}
+	list.Layout(lGtx, state, idx, func(rGtx layout.Context, i int) layout.Dimensions {
+		return drawItem(rGtx, shaper, props.Items[i], clickFor(clicks, i), image.Pt(w, itemH), collapsed, colors, sp, style)
+	})
+	stk.Pop()
 
 	return layout.Dimensions{Size: size}
 }
