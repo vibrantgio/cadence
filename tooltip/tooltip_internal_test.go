@@ -63,7 +63,7 @@ func driveFrameAt(w layout.Widget, ops *op.Ops, r *gioinput.Router, size image.P
 // delay, st.shown must remain false.
 func TestHoverEntryAfterDelayShows(t *testing.T) {
 	const delay = 50 * time.Millisecond
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 	props := Props{Text: "Save", Trigger: intTrigger(), Placement: Top, Shaper: shaper}
 	st := newState()
 	t.Cleanup(func() { clearTop(st.id) })
@@ -110,7 +110,7 @@ func TestHoverEntryAfterDelayShows(t *testing.T) {
 // hover Leave hides it (st.shown flips back to false).
 func TestHoverExitHides(t *testing.T) {
 	const delay = 50 * time.Millisecond
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 	props := Props{Text: "Save", Trigger: intTrigger(), Placement: Top, Shaper: shaper}
 	st := newState()
 	t.Cleanup(func() { clearTop(st.id) })
@@ -151,7 +151,7 @@ func TestHoverExitHides(t *testing.T) {
 // longer holds it).
 func TestSecondTooltipDismissesFirst(t *testing.T) {
 	const delay = 50 * time.Millisecond
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 	props := Props{Text: "Save", Trigger: intTrigger(), Placement: Top, Shaper: shaper}
 	st := newState()
 	t.Cleanup(func() { clearTop(st.id) })

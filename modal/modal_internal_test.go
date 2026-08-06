@@ -26,7 +26,7 @@ import (
 // trap tests cover the "does not escape" clause; this in-package test
 // covers the "cycles" clause by reading the unexported focus-tag slice.
 func TestTabCyclesFocusAmongModalTags(t *testing.T) {
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 
 	// Two prism/button actions, each keyed to its own caller-owned clickable.
 	// Those clickables are the action focus tags (route (a)); the modal owns

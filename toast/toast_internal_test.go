@@ -50,7 +50,7 @@ func driveFrameAt(w layout.Widget, ops *op.Ops, r *gioinput.Router, size image.P
 // package-scoped Subject across tests.
 func TestNotifyAddsAndLifetimeExpires(t *testing.T) {
 	const lifetime = 200 * time.Millisecond
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 	props := Props{Position: TopRight, Lifetime: lifetime, Shaper: shaper}
 	st := newStackState()
 

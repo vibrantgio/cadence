@@ -41,3 +41,17 @@ test -golden.update ./...` tests whatever package the repository root
 holds, not `./...`. And `./...` cannot stand in for the list — this module
 has test packages that store no goldens, and a test binary rejects a flag
 it never declared.
+
+**A golden test pins its faces; application code does not.** Every golden and
+pixel test here builds its shaper with
+`tokens.DefaultTypography.DeterministicShaper()` — the default typography's
+faces and nothing else, system fonts off, so the stored PNGs are the same on
+every machine. Applications call `Shaper()` instead, which falls back to the
+platform's own fonts so that text outside Roboto and Roboto Mono still
+resolves. The two are not interchangeable: a golden written against
+`Shaper()` passes on the machine that wrote it and fails on one with a
+different font set, which is the failure the split constructor exists to make
+impossible. When a test genuinely needs a glyph the default faces lack, widen
+the collection rather than reach for the system —
+`tokens.DefaultTypography.WithFaces(notosansmono.FontFace()).DeterministicShaper()`
+— and assert the shaper resolved the rune rather than storing it as pixels.

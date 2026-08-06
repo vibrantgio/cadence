@@ -22,7 +22,7 @@ import (
 // 10 to 10000; if the table accidentally iterates rows during header or
 // width computation, this benchmark immediately surfaces O(N) growth.
 func BenchmarkTableLayout(b *testing.B) {
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 	cols := []table.Column[row]{
 		{Header: "ID", Width: unit.Dp(80), Sortable: true, Cell: idCell(shaper)},
 		{Header: "Name", Sortable: true, Cell: nameCell(shaper)},
@@ -57,7 +57,7 @@ func BenchmarkTableLayout(b *testing.B) {
 // produce false positives, but tight enough that a real O(N) regression
 // (which would show ~100× growth) trips it.
 func TestBenchmarkConfirmsConstantCost(t *testing.T) {
-	shaper := tokens.DefaultTypography.Shaper()
+	shaper := tokens.DefaultTypography.DeterministicShaper()
 	cols := []table.Column[row]{
 		{Header: "ID", Width: unit.Dp(80), Sortable: true, Cell: idCell(shaper)},
 		{Header: "Name", Sortable: true, Cell: nameCell(shaper)},

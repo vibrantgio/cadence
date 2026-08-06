@@ -43,9 +43,14 @@ var (
 	collapsedSize = image.Pt(collapsedW, canvasH)
 )
 
+// defaultShaper returns the shaper every golden here draws with: the default
+// typography's faces pinned, system fonts off, so the stored images are the
+// same on every machine. A golden test pins its faces with
+// DeterministicShaper; application code takes the fallback Shaper. See
+// AGENTS.md.
 func defaultShaper(t *testing.T) *text.Shaper {
 	t.Helper()
-	return tokens.DefaultTypography.Shaper()
+	return tokens.DefaultTypography.DeterministicShaper()
 }
 
 // testIcon returns a 16×16 filled square in a fixed mid-Blue colour.

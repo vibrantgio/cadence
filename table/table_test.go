@@ -39,9 +39,14 @@ const (
 	viewH = 360
 )
 
+// defaultShaper returns the shaper every golden here draws with: the default
+// typography's faces pinned, system fonts off, so the stored images are the
+// same on every machine. A golden test pins its faces with
+// DeterministicShaper; application code takes the fallback Shaper. See
+// AGENTS.md.
 func defaultShaper(t *testing.T) *text.Shaper {
 	t.Helper()
-	return tokens.DefaultTypography.Shaper()
+	return tokens.DefaultTypography.DeterministicShaper()
 }
 
 func liveWidget(t *testing.T, obs rx.Observable[layout.Widget]) layout.Widget {
