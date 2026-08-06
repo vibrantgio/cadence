@@ -60,22 +60,28 @@ func stackedPageObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 // should use Shell. sections are pre-built widgets for the scroll
 // region (Props.Sections is not consulted); Footer and ContentMaxWidth
 // are taken from props, with Footer appended after the last section.
+//
+// label is the LabelLarge role's whole text style, which the page spends
+// on its navbar, and d is the density both the navbar and the navbar
+// slot's pinned height derive from. Pass
+// tokens.DefaultTypography.LabelLarge and tokens.Comfortable for the
+// default desktop look; before F3.4 the static path was pinned to
+// Comfortable with no way to say otherwise.
 func RenderStackedPage(
 	shaper *text.Shaper,
 	props Props,
 	sections []layout.Widget,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
+	d tokens.Density,
 ) layout.Widget {
-	// The static path renders at tokens.Comfortable (the Render signature
-	// predates E1.4); density-aware rendering goes through Shell.
-	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
+	nbW := navbar.Render(shaper, props.Navbar, colors, sp, label, d)
 	list := &layout.List{Axis: layout.Vertical}
 	footer := props.Footer
 	maxW := props.ContentMaxWidth
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawStackedPage(gtx, nbW, sections, footer, colors, maxW, list, navbarHeight(tokens.Comfortable))
+		return drawStackedPage(gtx, nbW, sections, footer, colors, maxW, list, navbarHeight(d))
 	}
 }
 

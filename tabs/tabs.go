@@ -127,22 +127,27 @@ func Tabs(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 
 // Render produces a layout.Widget for a tabs view with a fixed selected
 // index and no event processing. Intended for golden-image testing and
-// static demonstrations; production code should use Tabs, which takes the
-// shaper and the LabelLarge text style from the theme's Typography. The
-// TypeScale parameter contributes only the LabelLarge size; typeface,
-// weight and line height stay at the shaper's defaults. Density is not a
-// parameter (the signature predates E1.4): the static path renders at
-// tokens.Comfortable; density-aware rendering goes through Tabs.
+// static demonstrations; production code should use Tabs, which reads
+// both of the parameters below off the theme.
+//
+// label is the LabelLarge role's whole text style — typeface, weight,
+// size and line height all reach the shaper — and d is the density the
+// strip draws at (the strip is exactly Density.ControlHeight tall, with
+// Density.PaddingY around each tab label). Pass
+// tokens.DefaultTypography.LabelLarge and tokens.Comfortable for the
+// default desktop look; before F3.4 the static path was pinned to
+// Comfortable with no way to say otherwise.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	selected int,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
+	d tokens.Density,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawTabs(gtx, shaper, props, nil, selected, colors, sp, tokens.TextStyle{Size: ts.LabelLarge}, tokens.Comfortable)
+		return drawTabs(gtx, shaper, props, nil, selected, colors, sp, label, d)
 	}
 }
 

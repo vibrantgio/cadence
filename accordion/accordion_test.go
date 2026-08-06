@@ -94,7 +94,7 @@ func TestAccordionGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := accordion.Props{Sections: threeSections(), Shaper: shaper}
-			w := accordion.Render(shaper, props, tc.open, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := accordion.Render(shaper, props, tc.open, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -116,7 +116,7 @@ func TestAccordionChevronRotatesBetweenStates(t *testing.T) {
 		props := accordion.Props{Sections: sections, Shaper: shaper}
 		// Crop to the header strip so the body area never participates
 		// in the diff regardless of how the renderer pads.
-		w := accordion.Render(shaper, props, open, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+		w := accordion.Render(shaper, props, open, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge)
 		return capture(t, image.Pt(48, 48), scene(w, bg))
 	}
 

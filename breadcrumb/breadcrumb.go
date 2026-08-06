@@ -114,19 +114,23 @@ func Breadcrumb(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 
 // Render produces a layout.Widget for a breadcrumb with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Breadcrumb, which takes the shaper and the
-// TitleSmall text style from the theme's Typography. The TypeScale
-// parameter contributes only the TitleSmall size; typeface, weight and
-// line height stay at the shaper's defaults.
+// production code should use Breadcrumb, which reads the shaper and the
+// same text style off the theme.
+//
+// label is the TitleSmall role's whole text style — typeface, weight,
+// size and line height all reach the shaper, exactly as they do on the
+// live path. Pass tokens.DefaultTypography.TitleSmall for the default
+// desktop look. There is no density parameter: a breadcrumb trail is a
+// text row, not a control.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawBreadcrumb(gtx, shaper, props.Items, nil, colors, sp, tokens.TextStyle{Size: ts.TitleSmall})
+		return drawBreadcrumb(gtx, shaper, props.Items, nil, colors, sp, label)
 	}
 }
 

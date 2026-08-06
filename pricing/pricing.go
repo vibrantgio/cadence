@@ -99,6 +99,7 @@ type resolvedTokens struct {
 	price   tokens.TextStyle // the DisplaySmall role (price)
 	body    tokens.TextStyle // the BodyMedium role (cadence suffix, features)
 	label   tokens.TextStyle // the LabelLarge role (CTA label)
+	density tokens.Density   // CTA control height and inner padding (E1.4)
 	shaper  *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
@@ -110,11 +111,11 @@ func Pricing(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 	// Flatten the nested theme observables into a concrete snapshot. The
 	// typography emission supplies the LabelSmall/TitleLarge/DisplaySmall/
 	// BodyMedium/LabelLarge text styles and the theme's cached shaper
-	// (ADR-003: the theme owns the typeface).
+	// (ADR-003: the theme owns the typeface); the density sizes the CTA.
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Density),
+			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Fourth
 				return resolvedTokens{
 					color:   n.First,
@@ -125,6 +126,7 @@ func Pricing(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 					price:   typ.DisplaySmall,
 					body:    typ.BodyMedium,
 					label:   typ.LabelLarge,
+					density: n.Fifth,
 					shaper:  typ.Shaper(),
 				}
 			},
@@ -156,30 +158,39 @@ func Pricing(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 
 // Render produces a layout.Widget for a pricing row with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Pricing, which takes the shaper and the
-// LabelSmall/TitleLarge/DisplaySmall/BodyMedium/LabelLarge text styles
-// from the theme's Typography. The TypeScale parameter contributes only
-// the role sizes; the chip, tier name and price fall back to a SemiBold
-// weight (matching the pre-Typography rendering) and the shaper's
-// default typeface and line height. No event work is performed: the
-// CTAs render as inert visuals.
+// production code should use Pricing, which reads both of the parameters
+// below off the theme. No event work is performed: the CTAs render as
+// inert visuals.
+//
+// typo supplies the five roles the row draws — LabelSmall for the
+// highlight chip, TitleLarge for the tier name, DisplaySmall for the
+// price, BodyMedium for the cadence suffix and feature lines, LabelLarge
+// for the CTA label — whole, so typeface, weight and line height reach
+// the shaper exactly as they do on the live path. A pattern that spends
+// more than one role takes the whole tokens.Typography rather than a
+// role's tokens.TextStyle each: the roles it picks stay its own business,
+// as they are on the live path. d is the density the CTA button draws at.
+// Pass tokens.DefaultTypography and tokens.Comfortable for the default
+// desktop look.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	typo tokens.Typography,
+	d tokens.Density,
 ) layout.Widget {
 	tok := resolvedTokens{
 		color:   colors,
 		spacing: sp,
 		radius:  rad,
-		chip:    tokens.TextStyle{Size: ts.LabelSmall},
-		name:    tokens.TextStyle{Size: ts.TitleLarge},
-		price:   tokens.TextStyle{Size: ts.DisplaySmall},
-		body:    tokens.TextStyle{Size: ts.BodyMedium},
-		label:   tokens.TextStyle{Size: ts.LabelLarge},
+		chip:    typo.LabelSmall,
+		name:    typo.TitleLarge,
+		price:   typo.DisplaySmall,
+		body:    typo.BodyMedium,
+		label:   typo.LabelLarge,
+		density: d,
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawPricing(gtx, shaper, props, tok, nil)
@@ -393,7 +404,7 @@ func checkmarkWidget(tok resolvedTokens) layout.Widget {
 // button fills the card's inner width (prism/button's intrinsic
 // "fill Max.X" sizing), giving the typical full-width pricing CTA.
 func ctaWidget(shaper *text.Shaper, cta *CTA, tok resolvedTokens, click *widget.Clickable) layout.Widget {
-	rendered := button.Render(shaper, cta.Label, tok.color, tok.spacing, tok.radius, ctaTypeScale(tok), button.RenderState{})
+	rendered := button.Render(shaper, cta.Label, tok.color, tok.spacing, tok.radius, tok.label, tok.density, button.RenderState{})
 	return func(gtx layout.Context) layout.Dimensions {
 		if click == nil {
 			return rendered(gtx)
@@ -445,11 +456,4 @@ func styleLabel(maxLines int, style tokens.TextStyle) widget.Label {
 		wl.LineHeightScale = 1
 	}
 	return wl
-}
-
-// ctaTypeScale synthesizes the size-only TypeScale consumed by
-// prism/button's legacy Render signature: it reads only the LabelLarge
-// size, exactly what the snapshot's LabelLarge role carries.
-func ctaTypeScale(tok resolvedTokens) tokens.TypeScale {
-	return tokens.TypeScale{LabelLarge: tok.label.Size}
 }

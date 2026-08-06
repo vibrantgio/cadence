@@ -129,21 +129,26 @@ func Pagination(th rx.Observable[theme.Theme], props Props) rx.Observable[layout
 
 // Render produces a layout.Widget for a pagination row with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Pagination, which takes the shaper and the
-// LabelLarge text style from the theme's Typography. The TypeScale
-// parameter contributes only the LabelLarge size; typeface, weight and
-// line height stay at the shaper's defaults. Density is not a parameter
-// (the signature predates E1.4): the static path renders at
-// tokens.Comfortable; density-aware rendering goes through Pagination.
+// production code should use Pagination, which reads both of the
+// parameters below off the theme.
+//
+// label is the LabelLarge role's whole text style — typeface, weight,
+// size and line height all reach the shaper — and d is the density the
+// row draws at (every cell is a Density.ControlHeight square, and the
+// chevron glyph scales with it). Pass
+// tokens.DefaultTypography.LabelLarge and tokens.Comfortable for the
+// default desktop look; before F3.4 the static path was pinned to
+// Comfortable with no way to say otherwise.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
+	d tokens.Density,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, label: tokens.TextStyle{Size: ts.LabelLarge}, density: tokens.Comfortable}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, label: label, density: d}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawPagination(gtx, shaper, props, nil, nil, nil, tok)
 	}

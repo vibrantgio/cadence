@@ -34,7 +34,7 @@ func BenchmarkTableLayout(b *testing.B) {
 		items := makeRows(n)
 		b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
 			w := table.Render(shaper, cols, items, table.Sort{Column: 1, Asc: true},
-				tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+				tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -67,7 +67,7 @@ func TestBenchmarkConfirmsConstantCost(t *testing.T) {
 	measure := func(n int) int64 {
 		items := makeRows(n)
 		w := table.Render(shaper, cols, items, table.Sort{Column: 1, Asc: true},
-			tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+			tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		result := testing.Benchmark(func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -112,18 +112,18 @@ func makeRows(n int) []row {
 
 func idCell(shaper *text.Shaper) func(row) layout.Widget {
 	return func(r row) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.Itoa(r.ID))
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypography.BodyMedium, strconv.Itoa(r.ID))
 	}
 }
 
 func nameCell(shaper *text.Shaper) func(row) layout.Widget {
 	return func(r row) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, r.Name)
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypography.BodyMedium, r.Name)
 	}
 }
 
 func valueCell(shaper *text.Shaper) func(row) layout.Widget {
 	return func(r row) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.FormatFloat(r.Value, 'f', 2, 64))
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypography.BodyMedium, strconv.FormatFloat(r.Value, 'f', 2, 64))
 	}
 }

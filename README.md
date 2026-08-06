@@ -31,15 +31,25 @@ Every package has the same two entry points, and the split is deliberate:
   inside the pattern's `rx.Defer` scope so it survives the view rebuilds an MVU
   loop drives.
 - **The static form** — `Render(shaper, props, <state>, colors, spacing,
-  radius, typescale)` — takes resolved tokens and the state as plain values and
-  draws one frame with no event handling. That is what the golden-image tests
-  drive, and what to use for static rendering. `shell` adds
+  radius, <type>[, density])` — takes resolved tokens and the state as plain
+  values and draws one frame with no event handling. That is what the
+  golden-image tests drive, and what to use for static rendering. `shell` adds
   `RenderThreeColumn` and `RenderStackedPage` for the layouts whose slots are
-  streams in the live form. These signatures are frozen golden surfaces — they
-  still take the legacy `tokens.TypeScale`, and the pending major (F3.3 of the
-  [org plan](https://github.com/vibrantgio/.github), planned) re-cuts them to
-  `TextStyle` + `Density`. Drive patterns through their live entry points
+  streams in the live form. Drive patterns through their live entry points
   unless you are rendering a static frame.
+
+  Two rules fix the tail of every static signature, both settled in v0.3.0.
+  A pattern that draws one type role takes that role's whole
+  `tokens.TextStyle` — typeface, weight, size and line height, exactly what
+  the live path reads off the theme — while one that spends several (`hero`,
+  `pricing`, `feature`, `testimonial`) takes the whole `tokens.Typography`
+  and picks its own roles, as it does live. And a `tokens.Density` follows
+  only where the pattern sizes a control: `navbar`, `sidebar`, `tabs`,
+  `table`, `pagination`, `shell`, `hero`, `pricing` and `modal` take one;
+  `alert`, `accordion`, `breadcrumb`, `tooltip`, `toast`, `feature`,
+  `testimonial` and `table.RenderTextCell` do not, because nothing in them
+  has a control height. Until v0.3.0 these signatures took a
+  `tokens.TypeScale` and rendered at a hardcoded `tokens.Comfortable`.
 
 Typography is theme-owned: in the live form every pattern that draws text
 shapes with the theme's `Typography.Shaper()` and the Material Design 3 text
@@ -233,6 +243,18 @@ replaced by `./...`.
 
 Honest about what does not work yet:
 
+- **v0.3.0 is a breaking release.** Every static `Render` is re-cut off the
+  `tokens.TypeScale` spectrum dropped in its own v0.3.0, onto a
+  `tokens.TextStyle` or a `tokens.Typography` plus, where a control is
+  sized, a `tokens.Density` — see "Two forms" above for which shape each
+  pattern takes. Old call: `…, tokens.Spacing, tokens.DefaultTypeScale)`.
+  New call: `…, tokens.Spacing, tokens.DefaultTypography.LabelLarge,
+  tokens.Comfortable)`. The live entry points are unchanged.
+- **`hero`'s outlined Secondary CTA was 8 dp too tall until v0.3.0.** It
+  hardcoded 44 dp to line up with the filled Primary, which was
+  prism/button's height until E1.3 re-cut that to the density's
+  `ControlHeight` (36 dp Comfortable). Both CTAs now follow the density and
+  line up again.
 - **`table` has no per-header widget slot.** Headers are drawn internally from
   `Column.Header` strings, so anything else on a header — a tooltip, a filter
   affordance — has to be positioned by arithmetic over the column widths from

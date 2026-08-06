@@ -85,7 +85,7 @@ func TestTestimonialGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := testimonial.Props{Variant: tc.variant, Items: tc.items, Shaper: shaper}
-			w := testimonial.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := testimonial.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -101,12 +101,12 @@ func TestTestimonialVariantsDiffer(t *testing.T) {
 	single := testimonial.Render(
 		shaper,
 		testimonial.Props{Variant: testimonial.Single, Items: items, Shaper: shaper},
-		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale,
+		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	grid := testimonial.Render(
 		shaper,
 		testimonial.Props{Variant: testimonial.Grid, Items: items, Shaper: shaper},
-		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale,
+		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	a := capture(t, canvasSize, scene(single, bg))
 	b := capture(t, canvasSize, scene(grid, bg))
@@ -128,12 +128,12 @@ func TestTestimonialLightDarkDiffer(t *testing.T) {
 	light := testimonial.Render(
 		shaper,
 		testimonial.Props{Variant: testimonial.Grid, Items: items, Shaper: shaper},
-		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale,
+		tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	dark := testimonial.Render(
 		shaper,
 		testimonial.Props{Variant: testimonial.Grid, Items: items, Shaper: shaper},
-		tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale,
+		tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography,
 	)
 	imgLight := capture(t, canvasSize, scene(light, bg))
 	imgDark := capture(t, canvasSize, scene(dark, bg))

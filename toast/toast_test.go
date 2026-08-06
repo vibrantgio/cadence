@@ -96,7 +96,7 @@ func TestStackGolden(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := toast.Render(shaper, tc.props, tc.items, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := toast.Render(shaper, tc.props, tc.items, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -109,8 +109,8 @@ func TestStackEmptyAndPopulatedDiffer(t *testing.T) {
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 	props := toast.Props{Position: toast.TopRight, Shaper: shaper}
 
-	empty := toast.Render(shaper, props, nil, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	full := toast.Render(shaper, props, []toast.Toast{{ID: 1, Level: toast.Info}}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	empty := toast.Render(shaper, props, nil, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
+	full := toast.Render(shaper, props, []toast.Toast{{ID: 1, Level: toast.Info}}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
 
 	imgE := capture(t, canvasSize, scene(empty, bg))
 	imgF := capture(t, canvasSize, scene(full, bg))
@@ -130,8 +130,8 @@ func TestStackPositionAnchoring(t *testing.T) {
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 	items := []toast.Toast{{ID: 1, Level: toast.Info}}
 
-	tr := toast.Render(shaper, toast.Props{Position: toast.TopRight, Shaper: shaper}, items, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	bl := toast.Render(shaper, toast.Props{Position: toast.BottomLeft, Shaper: shaper}, items, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	tr := toast.Render(shaper, toast.Props{Position: toast.TopRight, Shaper: shaper}, items, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
+	bl := toast.Render(shaper, toast.Props{Position: toast.BottomLeft, Shaper: shaper}, items, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelMedium)
 
 	imgTR := capture(t, canvasSize, scene(tr, bg))
 	imgBL := capture(t, canvasSize, scene(bl, bg))

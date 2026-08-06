@@ -122,17 +122,23 @@ func Feature(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 
 // Render produces a layout.Widget for a feature grid with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Feature, which takes the shaper and the
-// TitleMedium/BodyMedium text styles from the theme's Typography. The
-// TypeScale parameter contributes only the role sizes; the title falls
-// back to a SemiBold weight (matching the pre-Typography rendering) and
-// the shaper's default typeface and line height.
+// production code should use Feature, which reads the same typography
+// off the theme.
+//
+// typo supplies the two roles the grid draws — TitleMedium for the item
+// titles, BodyMedium for their descriptions — whole, so typeface, weight
+// and line height reach the shaper exactly as they do on the live path.
+// A pattern that spends more than one role takes the whole
+// tokens.Typography rather than a role's tokens.TextStyle each: the roles
+// it picks stay its own business, as they are on the live path. Pass
+// tokens.DefaultTypography for the default desktop look. There is no
+// density parameter: a feature grid sizes no control.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	typo tokens.Typography,
 ) layout.Widget {
 	if props.Columns <= 0 {
 		props.Columns = defaultColumns
@@ -140,8 +146,8 @@ func Render(
 	tok := resolvedTokens{
 		color:   colors,
 		spacing: sp,
-		title:   tokens.TextStyle{Size: ts.TitleMedium},
-		body:    tokens.TextStyle{Size: ts.BodyMedium},
+		title:   typo.TitleMedium,
+		body:    typo.BodyMedium,
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawFeature(gtx, shaper, props, tok)

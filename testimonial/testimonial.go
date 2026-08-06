@@ -148,27 +148,32 @@ func Testimonial(th rx.Observable[theme.Theme], props Props) rx.Observable[layou
 
 // Render produces a layout.Widget for a testimonial with pre-resolved
 // tokens. Intended for golden-image testing and static demonstrations;
-// production code should use Testimonial, which takes the shaper and the
-// BodyLarge/BodyMedium/BodySmall text styles from the theme's Typography.
-// The TypeScale parameter contributes only the role sizes; the author
-// name and placeholder letter fall back to a SemiBold weight (matching
-// the pre-Typography rendering) and the shaper's default typeface and
-// line height.
+// production code should use Testimonial, which reads the same typography
+// off the theme.
+//
+// typo supplies the three roles the card draws — BodyLarge for the quote,
+// BodyMedium for the author name, BodySmall for the role line — whole, so
+// typeface, weight and line height reach the shaper exactly as they do on
+// the live path. A pattern that spends more than one role takes the whole
+// tokens.Typography rather than a role's tokens.TextStyle each: the roles
+// it picks stay its own business, as they are on the live path. Pass
+// tokens.DefaultTypography for the default desktop look. There is no
+// density parameter: a testimonial card sizes no control.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	typo tokens.Typography,
 ) layout.Widget {
 	tok := resolvedTokens{
 		color:   colors,
 		spacing: sp,
 		radius:  rad,
-		quote:   tokens.TextStyle{Size: ts.BodyLarge},
-		body:    tokens.TextStyle{Size: ts.BodyMedium},
-		small:   tokens.TextStyle{Size: ts.BodySmall},
+		quote:   typo.BodyLarge,
+		body:    typo.BodyMedium,
+		small:   typo.BodySmall,
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawTestimonial(gtx, shaper, props, tok)

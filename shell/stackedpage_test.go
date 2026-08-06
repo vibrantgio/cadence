@@ -82,7 +82,7 @@ func TestShellStackedPageGolden(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := shell.RenderStackedPage(shaper, tc.props, tc.sections, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := shell.RenderStackedPage(shaper, tc.props, tc.sections, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			renderGolden(t, tc.name, stackedSize, scene(w, tc.bg))
 		})
 	}
@@ -119,7 +119,7 @@ func TestShellStackedPageContentMaxWidth(t *testing.T) {
 				ContentMaxWidth: tc.maxW,
 			}
 			w := shell.RenderStackedPage(shaper, props, []layout.Widget{section},
-				tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+				tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			img := capture(t, stackedSize, w)
 			if img == nil {
 				return

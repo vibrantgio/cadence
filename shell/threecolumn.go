@@ -98,25 +98,31 @@ func threeColumnObservable(th rx.Observable[theme.Theme], props Props) rx.Observ
 // leading and trailing columns (Props.Sidebar and Props.Aside are not
 // consulted); a nil sidebarW renders an empty leading column, and a
 // nil asideW omits the aside column and its divider entirely.
+//
+// label is the LabelLarge role's whole text style, which the layout
+// spends on its navbar, and d is the density both the navbar and the
+// navbar slot's pinned height derive from. Pass
+// tokens.DefaultTypography.LabelLarge and tokens.Comfortable for the
+// default desktop look; before F3.4 the static path was pinned to
+// Comfortable with no way to say otherwise.
 func RenderThreeColumn(
 	shaper *text.Shaper,
 	props Props,
 	sidebarW, asideW layout.Widget,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
+	d tokens.Density,
 	asideWidth unit.Dp,
 ) layout.Widget {
 	if sidebarW == nil {
 		sidebarW = emptyWidget
 	}
-	// The static path renders at tokens.Comfortable (the Render signature
-	// predates E1.4); density-aware rendering goes through Shell.
-	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
+	nbW := navbar.Render(shaper, props.Navbar, colors, sp, label, d)
 	hasAside := asideW != nil
 	w := clampAsideWidth(asideWidth)
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawThreeColumn(gtx, nbW, sidebarW, props.Main, asideW, props.Footer, w, colors, nil, hasAside, navbarHeight(tokens.Comfortable))
+		return drawThreeColumn(gtx, nbW, sidebarW, props.Main, asideW, props.Footer, w, colors, nil, hasAside, navbarHeight(d))
 	}
 }
 

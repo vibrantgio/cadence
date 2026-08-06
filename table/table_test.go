@@ -91,13 +91,13 @@ func TestRowFnCalledOnlyForVisibleItems(t *testing.T) {
 			Header: "ID",
 			Cell: func(item int) layout.Widget {
 				calls++
-				return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.Itoa(item))
+				return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypography.BodyMedium, strconv.Itoa(item))
 			},
 		},
 	}
 
 	w := table.Render(shaper, cols, items, table.Sort{Column: -1},
-		tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+		tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 	var ops op.Ops
 	gtx := layout.Context{
 		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
@@ -254,7 +254,7 @@ func scene(w layout.Widget, bgColor color.NRGBA) layout.Widget {
 
 func cellAs(shaper *text.Shaper) func(int) layout.Widget {
 	return func(v int) layout.Widget {
-		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypeScale, strconv.Itoa(v))
+		return table.RenderTextCell(shaper, tokens.DefaultLight, tokens.DefaultTypography.BodyMedium, strconv.Itoa(v))
 	}
 }
 

@@ -170,13 +170,16 @@ func Table[T any](th rx.Observable[theme.Theme], props Props[T]) rx.Observable[l
 
 // Render produces a layout.Widget for a table with a fixed dataset and
 // pre-resolved tokens. Intended for golden-image testing and static
-// demonstrations; production code should use Table, which takes the shaper
-// and the LabelLarge header style from the theme's Typography. The TypeScale
-// parameter contributes only the LabelLarge size; the header keeps its
-// legacy bold weight, and typeface and line height stay at the shaper's
-// defaults. Density is not a parameter (the signature predates E1.4): the
-// static path renders at tokens.Comfortable; density-aware rendering goes
-// through Table.
+// demonstrations; production code should use Table, which reads both of the
+// parameters below off the theme.
+//
+// header is the LabelLarge role's whole text style — typeface, weight, size
+// and line height all reach the shaper — and d is the density the grid draws
+// at (header row and body rows are each exactly Density.ControlHeight). Pass
+// tokens.DefaultTypography.LabelLarge and tokens.Comfortable for the default
+// desktop look; before F3.4 the static path was pinned to Comfortable with no
+// way to say otherwise. A zero header Weight still falls back to the legacy
+// bold, so a hand-built size-only style renders as it always did.
 func Render[T any](
 	shaper *text.Shaper,
 	columns []Column[T],
@@ -184,9 +187,10 @@ func Render[T any](
 	sk Sort,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	header tokens.TextStyle,
+	d tokens.Density,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, header: tokens.TextStyle{Size: ts.LabelLarge}, density: tokens.Comfortable}
+	tok := resolvedTokens{color: colors, spacing: sp, header: header, density: d}
 	state := list.NewState()
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawTable(gtx, shaper, columns, items, sk, state, nil, tok)
@@ -482,13 +486,18 @@ func drawRow[T any](
 // RenderTextCell renders a single line of Text-coloured text within
 // the cell's allocated rectangle, with horizontal padding equal to
 // cellPadDp. Exported so consumers building their own Cell closures can
-// match the table's stock text style. The TypeScale parameter contributes
-// only the BodyMedium size; typeface, weight and line height stay at the
-// shaper's defaults.
+// match the table's stock text style.
+//
+// body is the BodyMedium role's whole text style — typeface, weight, size
+// and line height all reach the shaper. Pass
+// tokens.DefaultTypography.BodyMedium for the default desktop look. There
+// is no density parameter: the row that owns the cell is what density
+// sizes, and [Render] takes it there; a cell only fills the rectangle it
+// is handed.
 func RenderTextCell(
 	shaper *text.Shaper,
 	colors tokens.ColorTokens,
-	ts tokens.TypeScale,
+	body tokens.TextStyle,
 	s string,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
@@ -507,9 +516,20 @@ func RenderTextCell(
 		paint.ColorOp{Color: colors.Text}.Add(gtx.Ops)
 		material := mColor.Stop()
 
-		mLabel := op.Record(gtx.Ops)
+		// Shape with the BodyMedium role's typeface, weight, size and line
+		// height. A zero Weight (a hand-built size-only style) keeps the
+		// shaper's default weight, as this cell always did.
+		f := font.Font{Typeface: font.Typeface(body.Typeface)}
+		if body.Weight != 0 {
+			f.Weight = tokens.FontWeight(body.Weight)
+		}
 		wl := widget.Label{MaxLines: 1}
-		labelDims := wl.Layout(labelGtx, shaper, font.Font{}, unit.Sp(ts.BodyMedium), s, material)
+		if body.LineHeight != 0 {
+			wl.LineHeight = unit.Sp(body.LineHeight)
+			wl.LineHeightScale = 1
+		}
+		mLabel := op.Record(gtx.Ops)
+		labelDims := wl.Layout(labelGtx, shaper, f, unit.Sp(body.Size), s, material)
 		labelCall := mLabel.Stop()
 
 		offY := (size.Y - labelDims.Size.Y) / 2

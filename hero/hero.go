@@ -13,9 +13,10 @@
 //
 // CTA visuals: the Primary CTA reuses prism/button's filled visual via
 // button.Render; the Secondary CTA is rendered locally as an outlined
-// variant matching prism/button's geometry (44 dp min height, S4 horizontal
-// padding, Md corner radius). Click hit-testing is wired through
-// widget.Clickable in Hero — Render is static and performs no event work.
+// variant matching prism/button's geometry (Density.ControlHeight tall,
+// Density.PaddingX/PaddingY inside, Md corner radius). Click hit-testing is
+// wired through widget.Clickable in Hero — Render is static and performs no
+// event work.
 package hero
 
 import (
@@ -39,11 +40,6 @@ import (
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
-
-// minButtonHeight mirrors prism/button's 44 dp minimum interactive target so
-// the locally-rendered Secondary outlined CTA aligns vertically with the
-// Primary filled CTA produced by button.Render.
-const minButtonHeight = unit.Dp(44)
 
 // ctaIntrinsicWidth is the natural CTA cell width in dp. Both CTAs are
 // constrained to this width so prism/button's "fill available Max" sizing
@@ -96,6 +92,7 @@ type resolvedTokens struct {
 	title    tokens.TextStyle // the DisplaySmall role
 	subtitle tokens.TextStyle // the BodyLarge role
 	label    tokens.TextStyle // the LabelLarge role (CTA labels)
+	density  tokens.Density   // CTA control height and inner padding (E1.4)
 	shaper   *text.Shaper     // the theme's shaper; nil in the Render path
 }
 
@@ -107,11 +104,11 @@ func Hero(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 	// Flatten the nested theme observables into a concrete snapshot. The
 	// typography emission supplies the LabelSmall/DisplaySmall/BodyLarge/
 	// LabelLarge text styles and the theme's cached shaper (ADR-003: the
-	// theme owns the typeface).
+	// theme owns the typeface); the density sizes both CTAs.
 	resolved := rx.SwitchMap(th, func(t theme.Theme) rx.Observable[resolvedTokens] {
 		return rx.Map(
-			rx.CombineLatest4(t.Color, t.Spacing, t.Radius, t.Typography),
-			func(n rx.Tuple4[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography]) resolvedTokens {
+			rx.CombineLatest5(t.Color, t.Spacing, t.Radius, t.Typography, t.Density),
+			func(n rx.Tuple5[tokens.ColorTokens, tokens.SpacingScale, tokens.RadiusScale, tokens.Typography, tokens.Density]) resolvedTokens {
 				typ := n.Fourth
 				return resolvedTokens{
 					color:    n.First,
@@ -121,6 +118,7 @@ func Hero(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 					title:    typ.DisplaySmall,
 					subtitle: typ.BodyLarge,
 					label:    typ.LabelLarge,
+					density:  n.Fifth,
 					shaper:   typ.Shaper(),
 				}
 			},
@@ -152,28 +150,37 @@ func Hero(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widge
 
 // Render produces a layout.Widget for a hero with pre-resolved tokens.
 // Intended for golden-image testing and static demonstrations; production
-// code should use Hero, which takes the shaper and the LabelSmall/
-// DisplaySmall/BodyLarge/LabelLarge text styles from the theme's
-// Typography. The TypeScale parameter contributes only the role sizes;
-// the eyebrow and title fall back to a SemiBold weight (matching the
-// pre-Typography rendering) and the shaper's default typeface and line
-// height. No event work is performed: the CTAs render as inert visuals.
+// code should use Hero, which reads both of the parameters below off the
+// theme. No event work is performed: the CTAs render as inert visuals.
+//
+// typo supplies the four roles the hero draws — LabelSmall for the
+// eyebrow, DisplaySmall for the title, BodyLarge for the subtitle,
+// LabelLarge for the CTA labels — whole, so typeface, weight and line
+// height reach the shaper exactly as they do on the live path. A pattern
+// that spends more than one role takes the whole tokens.Typography rather
+// than a role's tokens.TextStyle each: the roles it picks stay its own
+// business, as they are on the live path. d is the density both CTAs draw
+// at — the filled one through prism/button, the outlined twin through the
+// matching local geometry. Pass tokens.DefaultTypography and
+// tokens.Comfortable for the default desktop look.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	typo tokens.Typography,
+	d tokens.Density,
 ) layout.Widget {
 	tok := resolvedTokens{
 		color:    colors,
 		spacing:  sp,
 		radius:   rad,
-		eyebrow:  tokens.TextStyle{Size: ts.LabelSmall},
-		title:    tokens.TextStyle{Size: ts.DisplaySmall},
-		subtitle: tokens.TextStyle{Size: ts.BodyLarge},
-		label:    tokens.TextStyle{Size: ts.LabelLarge},
+		eyebrow:  typo.LabelSmall,
+		title:    typo.DisplaySmall,
+		subtitle: typo.BodyLarge,
+		label:    typo.LabelLarge,
+		density:  d,
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawHero(gtx, shaper, props, tok, nil, nil)
@@ -322,13 +329,6 @@ func styleLabel(maxLines int, style tokens.TextStyle) widget.Label {
 	return wl
 }
 
-// ctaTypeScale synthesizes the size-only TypeScale consumed by
-// prism/button's legacy Render signature: it reads only the LabelLarge
-// size, exactly what the snapshot's LabelLarge role carries.
-func ctaTypeScale(tok resolvedTokens) tokens.TypeScale {
-	return tokens.TypeScale{LabelLarge: tok.label.Size}
-}
-
 // ctaRowWidget lays out the optional Primary/Secondary CTAs in a horizontal
 // row with S3 gap. Returns nil when both CTAs are nil.
 func ctaRowWidget(
@@ -359,7 +359,7 @@ func ctaRowWidget(
 // wrapped in widget.Clickable when a click target is provided. Sizing is
 // intrinsic — the button shrinks to its label rather than filling the row.
 func primaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, click *widget.Clickable) layout.Widget {
-	rendered := button.Render(shaper, label, tok.color, tok.spacing, tok.radius, ctaTypeScale(tok), button.RenderState{})
+	rendered := button.Render(shaper, label, tok.color, tok.spacing, tok.radius, tok.label, tok.density, button.RenderState{})
 	return func(gtx layout.Context) layout.Dimensions {
 		cgtx := ctaGtx(gtx)
 		if click == nil {
@@ -375,9 +375,10 @@ func primaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, cli
 }
 
 // secondaryCTAWidget renders the Secondary CTA as a locally-painted
-// outlined button. Geometry mirrors prism/button (44 dp min height, S4
-// horizontal padding, Md corner radius) so the two CTAs line up; the fill
-// is Surface and the perimeter carries a 1 dp Outline stroke.
+// outlined button. Geometry mirrors prism/button (Density.ControlHeight
+// tall, Density.PaddingX/PaddingY inside, Md corner radius) so the two CTAs
+// line up; the fill is Surface and the perimeter carries a 1 dp Outline
+// stroke.
 func secondaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, click *widget.Clickable) layout.Widget {
 	draw := func(gtx layout.Context) layout.Dimensions {
 		return drawOutlinedButton(gtx, shaper, label, tok)
@@ -397,9 +398,14 @@ func secondaryCTAWidget(shaper *text.Shaper, label string, tok resolvedTokens, c
 }
 
 func drawOutlinedButton(gtx layout.Context, shaper *text.Shaper, label string, tok resolvedTokens) layout.Dimensions {
-	padH := gtx.Dp(unit.Dp(tok.spacing.S4))
-	padV := gtx.Dp(unit.Dp(tok.spacing.S2))
-	minH := gtx.Dp(minButtonHeight)
+	// E1.4: mirror prism/button exactly — the drawn height is the density's
+	// ControlHeight and the inner padding is its PaddingX/PaddingY. Before
+	// F3.4 this was a hardcoded 44 dp, which had been prism/button's height
+	// until E1.3 re-cut it; the twin had been 8 dp taller than the filled
+	// CTA it is meant to line up with ever since.
+	padH := gtx.Dp(unit.Dp(tok.density.PaddingX))
+	padV := gtx.Dp(unit.Dp(tok.density.PaddingY))
+	minH := gtx.Dp(unit.Dp(tok.density.ControlHeight))
 	rad := gtx.Dp(unit.Dp(tok.radius.Md))
 	stroke := float32(gtx.Dp(unit.Dp(1)))
 

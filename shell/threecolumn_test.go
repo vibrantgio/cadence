@@ -63,14 +63,14 @@ func TestShellThreeColumnGolden(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			sbW := sidebar.Render(shaper, sbProps, false, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			sbW := sidebar.Render(shaper, sbProps, false, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			props := shell.Props{
 				Layout: shell.ThreeColumn,
 				Navbar: navbar.Props{Links: []navbar.Link{{Label: ""}, {Label: ""}}, Shaper: shaper},
 				Main:   fillRect(mainFill),
 				Footer: tc.footer,
 			}
-			w := shell.RenderThreeColumn(shaper, props, sbW, tc.aside, tc.colors, tokens.Spacing, tokens.DefaultTypeScale, tc.width)
+			w := shell.RenderThreeColumn(shaper, props, sbW, tc.aside, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable, tc.width)
 			renderGolden(t, tc.name, threeColSize, scene(w, tc.bg))
 		})
 	}

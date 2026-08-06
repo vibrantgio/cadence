@@ -137,13 +137,17 @@ func Tooltip(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Wi
 
 // Render produces a layout.Widget for a tooltip with pre-resolved tokens
 // and an explicit shown flag. Intended for golden-image testing and
-// static demonstrations; production code should use Tooltip, which takes
-// the shaper and the LabelSmall text style from the theme's Typography.
-// The TypeScale parameter contributes only the LabelSmall size; typeface,
-// weight and line height stay at the shaper's defaults. The returned
-// widget performs no input handling or arbitration: pass shown=true to
-// render the trigger plus the floating surface, shown=false to render
-// only the trigger.
+// static demonstrations; production code should use Tooltip, which reads
+// the shaper and the same text style off the theme. The returned widget
+// performs no input handling or arbitration: pass shown=true to render
+// the trigger plus the floating surface, shown=false to render only the
+// trigger.
+//
+// label is the LabelSmall role's whole text style — typeface, weight,
+// size and line height all reach the shaper, exactly as they do on the
+// live path. Pass tokens.DefaultTypography.LabelSmall for the default
+// desktop look. There is no density parameter: a tooltip surface wraps
+// its text and sizes no control.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -151,9 +155,9 @@ func Render(
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, style: tokens.TextStyle{Size: ts.LabelSmall}}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, style: label}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawStatic(gtx, shaper, props, tok, shown)
 	}

@@ -98,7 +98,7 @@ func TestTabsGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := tabs.Props{Tabs: tc.tabs, Shaper: shaper}
-			w := tabs.Render(shaper, props, tc.selected, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := tabs.Render(shaper, props, tc.selected, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -113,7 +113,7 @@ func TestTabsSelectionUnderlineIsVisible(t *testing.T) {
 
 	render := func(selected int) *image.RGBA {
 		props := tabs.Props{Tabs: threeTabs(), Shaper: shaper}
-		w := tabs.Render(shaper, props, selected, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+		w := tabs.Render(shaper, props, selected, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		return capture(t, canvasSize, scene(w, bg))
 	}
 

@@ -144,19 +144,24 @@ func Accordion(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.
 // Render produces a layout.Widget for an accordion with a fixed open
 // map and no event processing. Intended for golden-image testing and
 // static demonstrations; production code should use Accordion, which
-// takes the shaper and the LabelLarge text style from the theme's
-// Typography. The TypeScale parameter contributes only the LabelLarge
-// size; typeface, weight and line height stay at the shaper's defaults.
+// reads the shaper and the same text style off the theme.
+//
+// label is the LabelLarge role's whole text style — typeface, weight,
+// size and line height all reach the shaper, exactly as they do on the
+// live path. Pass tokens.DefaultTypography.LabelLarge for the default
+// desktop look. There is no density parameter: an accordion sizes its
+// header from the label and its own layout constants, not from a
+// control height.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	open map[int]bool,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawAccordion(gtx, shaper, props, nil, open, colors, sp, tokens.TextStyle{Size: ts.LabelLarge})
+		return drawAccordion(gtx, shaper, props, nil, open, colors, sp, label)
 	}
 }
 

@@ -94,7 +94,7 @@ func TestTooltipGolden(t *testing.T) {
 				Placement: tc.placement,
 				Shaper:    shaper,
 			}
-			w := tooltip.Render(shaper, props, true, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := tooltip.Render(shaper, props, true, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelSmall)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -109,8 +109,8 @@ func TestTooltipShownAndHiddenDiffer(t *testing.T) {
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	props := tooltip.Props{Text: "Save", Trigger: trigger, Placement: tooltip.Top, Shaper: shaper}
 
-	shown := tooltip.Render(shaper, props, true, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	hidden := tooltip.Render(shaper, props, false, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	shown := tooltip.Render(shaper, props, true, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelSmall)
+	hidden := tooltip.Render(shaper, props, false, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelSmall)
 
 	imgShown := capture(t, canvasSize, scene(shown, bg))
 	imgHidden := capture(t, canvasSize, scene(hidden, bg))

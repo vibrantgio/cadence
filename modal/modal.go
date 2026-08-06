@@ -206,14 +206,18 @@ func Modal(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 
 // Render produces a layout.Widget for a modal with pre-resolved tokens and
 // an explicit open flag. Intended for golden-image testing and static
-// demonstrations; production code should use Modal, which takes the shaper
-// and the TitleMedium text style from the theme's Typography. The TypeScale
-// parameter contributes only the TitleMedium size; the title falls back to
-// a SemiBold weight (matching the pre-Typography rendering) and the
-// shaper's default typeface and line height. The returned widget performs
-// no input handling: pass open=true to render the scrim and surface,
-// open=false to render nothing (the widget consumes the constraints but
-// paints no pixels).
+// demonstrations; production code should use Modal, which reads both of the
+// parameters below off the theme. The returned widget performs no input
+// handling: pass open=true to render the scrim and surface, open=false to
+// render nothing (the widget consumes the constraints but paints no pixels).
+//
+// title is the TitleMedium role's whole text style — typeface, weight, size
+// and line height all reach the shaper — and d is the density the close
+// button draws at. It is the one thing density sizes here: the surface
+// itself is content-sized, and the close affordance is an icon-only
+// prism/button, which takes a density and no text style at all. Pass
+// tokens.DefaultTypography.TitleMedium and tokens.Comfortable for the
+// default desktop look.
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -221,9 +225,10 @@ func Render(
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	title tokens.TextStyle,
+	d tokens.Density,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, title: tokens.TextStyle{Size: ts.TitleMedium}}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, title: title}
 	st := newState()
 	// Static, inert close affordance: the same icon painter the live path
 	// uses, rendered through button.RenderIcon so goldens stay text-free and
@@ -231,7 +236,7 @@ func Render(
 	// radius for golden determinism).
 	var closeW layout.Widget
 	if !props.HideClose {
-		closeW = button.RenderIcon(crossIcon, colors, sp, rad, ts, button.RenderState{})
+		closeW = button.RenderIcon(crossIcon, colors, sp, rad, d, button.RenderState{})
 	}
 	return func(gtx layout.Context) layout.Dimensions {
 		if !open {

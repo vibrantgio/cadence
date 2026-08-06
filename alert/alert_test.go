@@ -94,7 +94,7 @@ func TestAlertGolden(t *testing.T) {
 				Body:   body,
 				Shaper: shaper,
 			}
-			w := alert.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := alert.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -110,7 +110,7 @@ func TestAlertVariantsDiffer(t *testing.T) {
 
 	render := func(v alert.Variant) *image.RGBA {
 		props := alert.Props{Variant: v, Body: body, Shaper: shaper}
-		w := alert.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+		w := alert.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 		return capture(t, canvasSize, scene(w, bg))
 	}
 
@@ -149,8 +149,8 @@ func TestAlertLightDarkDiffer(t *testing.T) {
 	for _, v := range []alert.Variant{alert.Info, alert.Success, alert.Warning, alert.Error} {
 		propsL := alert.Props{Variant: v, Body: body, Shaper: shaper}
 		propsD := alert.Props{Variant: v, Body: body, Shaper: shaper}
-		light := alert.Render(shaper, propsL, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-		dark := alert.Render(shaper, propsD, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+		light := alert.Render(shaper, propsL, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
+		dark := alert.Render(shaper, propsD, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium)
 
 		imgLight := capture(t, canvasSize, scene(light, bg))
 		imgDark := capture(t, canvasSize, scene(dark, bg))

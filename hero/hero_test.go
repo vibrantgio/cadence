@@ -112,7 +112,7 @@ func TestHeroGolden(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := hero.Render(shaper, tc.props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := hero.Render(shaper, tc.props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -127,8 +127,8 @@ func TestHeroVisualSlotShiftsLayout(t *testing.T) {
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	visual := fillRect(color.NRGBA{R: 60, G: 110, B: 200, A: 255}, 120)
 
-	textOnly := hero.Render(shaper, hero.Props{Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	withVisual := hero.Render(shaper, hero.Props{Visual: visual, Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	textOnly := hero.Render(shaper, hero.Props{Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
+	withVisual := hero.Render(shaper, hero.Props{Visual: visual, Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 
 	imgA := capture(t, canvasSize, scene(textOnly, bg))
 	imgB := capture(t, canvasSize, scene(withVisual, bg))
@@ -152,8 +152,8 @@ func TestHeroLightDarkDiffer(t *testing.T) {
 		SecondaryCTA: &hero.CTA{Label: ""},
 		Shaper:       shaper,
 	}
-	light := hero.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	dark := hero.Render(shaper, props, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	light := hero.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
+	dark := hero.Render(shaper, props, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 
 	imgLight := capture(t, canvasSize, scene(light, bg))
 	imgDark := capture(t, canvasSize, scene(dark, bg))

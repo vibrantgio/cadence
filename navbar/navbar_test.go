@@ -78,7 +78,7 @@ func TestNavbarGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := navbar.Props{Links: tc.links, Shaper: shaper}
-			w := navbar.Render(shaper, props, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := navbar.Render(shaper, props, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -92,7 +92,7 @@ func TestNavbarActiveVsDefaultDiffer(t *testing.T) {
 
 	render := func(links []navbar.Link) *image.RGBA {
 		props := navbar.Props{Links: links, Shaper: shaper}
-		w := navbar.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+		w := navbar.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		return capture(t, canvasSize, scene(w, bg))
 	}
 

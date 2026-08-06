@@ -100,7 +100,7 @@ func TestFeatureGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := feature.Props{Columns: tc.columns, Items: tc.items}
-			w := feature.Render(shaper, props, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := feature.Render(shaper, props, tc.colors, tokens.Spacing, tokens.DefaultTypography)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -113,8 +113,8 @@ func TestFeatureColumnsDefaultsToThree(t *testing.T) {
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	items := []feature.Item{emptyItem(), emptyItem(), emptyItem()}
 
-	zero := feature.Render(shaper, feature.Props{Columns: 0, Items: items}, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
-	three := feature.Render(shaper, feature.Props{Columns: 3, Items: items}, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+	zero := feature.Render(shaper, feature.Props{Columns: 0, Items: items}, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography)
+	three := feature.Render(shaper, feature.Props{Columns: 3, Items: items}, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography)
 
 	a := capture(t, canvasSize, scene(zero, bg))
 	b := capture(t, canvasSize, scene(three, bg))

@@ -90,7 +90,7 @@ func TestPricingGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := pricing.Props{Tiers: tc.tiers, Shaper: shaper}
-			w := pricing.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := pricing.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -106,8 +106,8 @@ func TestPricingHighlightDiffers(t *testing.T) {
 	plain := pricing.Props{Tiers: []pricing.Tier{emptyTier(false), emptyTier(false), emptyTier(false)}, Shaper: shaper}
 	highlighted := pricing.Props{Tiers: []pricing.Tier{emptyTier(false), emptyTier(true), emptyTier(false)}, Shaper: shaper}
 
-	a := capture(t, canvasSize, scene(pricing.Render(shaper, plain, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale), bg))
-	b := capture(t, canvasSize, scene(pricing.Render(shaper, highlighted, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale), bg))
+	a := capture(t, canvasSize, scene(pricing.Render(shaper, plain, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable), bg))
+	b := capture(t, canvasSize, scene(pricing.Render(shaper, highlighted, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable), bg))
 	if a == nil || b == nil {
 		return
 	}
@@ -123,8 +123,8 @@ func TestPricingLightDarkDiffer(t *testing.T) {
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 	tiers := []pricing.Tier{emptyTier(false), emptyTier(true), emptyTier(false)}
 
-	light := pricing.Render(shaper, pricing.Props{Tiers: tiers, Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	dark := pricing.Render(shaper, pricing.Props{Tiers: tiers, Shaper: shaper}, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	light := pricing.Render(shaper, pricing.Props{Tiers: tiers, Shaper: shaper}, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
+	dark := pricing.Render(shaper, pricing.Props{Tiers: tiers, Shaper: shaper}, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography, tokens.Comfortable)
 
 	imgLight := capture(t, canvasSize, scene(light, bg))
 	imgDark := capture(t, canvasSize, scene(dark, bg))

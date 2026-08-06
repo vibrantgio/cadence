@@ -100,7 +100,7 @@ func TestSidebarGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := sidebar.Props{Items: items(tc.activeIdx), Shaper: shaper}
-			w := sidebar.Render(shaper, props, tc.collapsed, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := sidebar.Render(shaper, props, tc.collapsed, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			renderGolden(t, tc.name, tc.size, scene(w, tc.bg))
 		})
 	}
@@ -123,7 +123,7 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 			items[activeIdx].Active = true
 		}
 		props := sidebar.Props{Items: items, Shaper: shaper}
-		w := sidebar.Render(shaper, props, false, colors, tokens.Spacing, tokens.DefaultTypeScale)
+		w := sidebar.Render(shaper, props, false, colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		return capture(t, expandedSize, scene(w, bg))
 	}
 

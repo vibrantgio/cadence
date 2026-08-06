@@ -137,9 +137,9 @@ func TestShellGolden(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var sidebarW layout.Widget
 			if tc.sidebarProps != nil {
-				sidebarW = sidebar.Render(shaper, *tc.sidebarProps, false, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+				sidebarW = sidebar.Render(shaper, *tc.sidebarProps, false, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			}
-			w := shell.Render(shaper, tc.props, sidebarW, tc.colors, tokens.Spacing, tokens.DefaultTypeScale, tc.ratio)
+			w := shell.Render(shaper, tc.props, sidebarW, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable, tc.ratio)
 			renderGolden(t, tc.name, tc.size, scene(w, tc.bg))
 		})
 	}

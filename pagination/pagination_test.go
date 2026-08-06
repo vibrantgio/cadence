@@ -74,7 +74,7 @@ func TestPaginationGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := pagination.Props{Page: tc.page, PageCount: tc.pageCount, Shaper: shaper}
-			w := pagination.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := pagination.Render(shaper, props, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -90,7 +90,7 @@ func TestPaginationCurrentPagePositionDiffers(t *testing.T) {
 
 	render := func(page int) *image.RGBA {
 		props := pagination.Props{Page: page, PageCount: 5, Shaper: shaper}
-		w := pagination.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+		w := pagination.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		return capture(t, canvasSize, scene(w, bg))
 	}
 
@@ -112,8 +112,8 @@ func TestPaginationLightDarkDiffer(t *testing.T) {
 	sharpRadius := tokens.RadiusScale{}
 
 	props := pagination.Props{Page: 3, PageCount: 5, Shaper: shaper}
-	light := pagination.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	dark := pagination.Render(shaper, props, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	light := pagination.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
+	dark := pagination.Render(shaper, props, tokens.DefaultDark, tokens.Spacing, sharpRadius, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 
 	imgLight := capture(t, canvasSize, scene(light, bg))
 	imgDark := capture(t, canvasSize, scene(dark, bg))

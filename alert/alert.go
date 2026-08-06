@@ -106,21 +106,24 @@ func Alert(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 
 // Render produces a layout.Widget for an alert with pre-resolved tokens.
 // Intended for golden-image testing and static demonstrations; production
-// code should use Alert, which takes the shaper and the TitleMedium text
-// style from the theme's Typography. The TypeScale parameter contributes
-// only the TitleMedium size; the title falls back to a SemiBold weight
-// (matching the pre-Typography rendering) and the shaper's default
-// typeface and line height.
+// code should use Alert, which reads the shaper and the same text style
+// off the theme.
+//
+// title is the TitleMedium role's whole text style — typeface, weight,
+// size and line height all reach the shaper, exactly as they do on the
+// live path. Pass tokens.DefaultTypography.TitleMedium for the default
+// desktop look. There is no density parameter: an alert is a surface
+// sized by its content, not a control.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	title tokens.TextStyle,
 ) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return drawAlert(gtx, shaper, props, colors, sp, rad, tokens.TextStyle{Size: ts.TitleMedium})
+		return drawAlert(gtx, shaper, props, colors, sp, rad, title)
 	}
 }
 

@@ -199,11 +199,15 @@ func Stack(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 // Render produces a layout.Widget for a fixed []Toast snapshot with
 // pre-resolved tokens. Intended for golden-image testing and static
 // demonstrations; production code should use Stack, which takes the
-// shaper and the LabelMedium text style from the theme's Typography. The
-// TypeScale parameter contributes only the LabelMedium size; typeface,
-// weight and line height stay at the shaper's defaults. The returned
-// widget performs no input handling, no fading, and does not consume the
+// shaper and the same text style off the theme. The returned widget
+// performs no input handling, no fading, and does not consume the
 // package-scoped Subject.
+//
+// label is the LabelMedium role's whole text style — typeface, weight,
+// size and line height all reach the shaper, exactly as they do on the
+// live path. Pass tokens.DefaultTypography.LabelMedium for the default
+// desktop look. There is no density parameter: a toast's height is a
+// legibility floor around its message, not a control height (E1.4).
 func Render(
 	shaper *text.Shaper,
 	props Props,
@@ -211,9 +215,9 @@ func Render(
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
 	rad tokens.RadiusScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
 ) layout.Widget {
-	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, style: tokens.TextStyle{Size: ts.LabelMedium}}
+	tok := resolvedTokens{color: colors, spacing: sp, radius: rad, style: label}
 	return func(gtx layout.Context) layout.Dimensions {
 		return drawStackStatic(gtx, shaper, props, toasts, tok)
 	}

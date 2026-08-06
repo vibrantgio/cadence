@@ -69,7 +69,7 @@ func TestBreadcrumbGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			props := breadcrumb.Props{Items: tc.items, Shaper: shaper}
-			w := breadcrumb.Render(shaper, props, tc.colors, tokens.Spacing, tokens.DefaultTypeScale)
+			w := breadcrumb.Render(shaper, props, tc.colors, tokens.Spacing, tokens.DefaultTypography.TitleSmall)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -84,7 +84,7 @@ func TestBreadcrumbThreeVsSingle(t *testing.T) {
 
 	render := func(items []breadcrumb.Item) *image.RGBA {
 		props := breadcrumb.Props{Items: items, Shaper: shaper}
-		w := breadcrumb.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
+		w := breadcrumb.Render(shaper, props, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.TitleSmall)
 		return capture(t, canvasSize, scene(w, bg))
 	}
 
@@ -107,8 +107,8 @@ func TestBreadcrumbLightDarkDiffer(t *testing.T) {
 	items := []breadcrumb.Item{{Label: ""}, {Label: ""}, {Label: ""}}
 	propsL := breadcrumb.Props{Items: items, Shaper: shaper}
 	propsD := breadcrumb.Props{Items: items, Shaper: shaper}
-	light := breadcrumb.Render(shaper, propsL, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypeScale)
-	dark := breadcrumb.Render(shaper, propsD, tokens.DefaultDark, tokens.Spacing, tokens.DefaultTypeScale)
+	light := breadcrumb.Render(shaper, propsL, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.TitleSmall)
+	dark := breadcrumb.Render(shaper, propsD, tokens.DefaultDark, tokens.Spacing, tokens.DefaultTypography.TitleSmall)
 
 	imgLight := capture(t, canvasSize, scene(light, bg))
 	imgDark := capture(t, canvasSize, scene(dark, bg))

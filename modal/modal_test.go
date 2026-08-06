@@ -114,7 +114,7 @@ func TestModalGolden(t *testing.T) {
 				Actions: tc.actions,
 				Shaper:  shaper,
 			}
-			w := modal.Render(shaper, props, tc.open, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+			w := modal.Render(shaper, props, tc.open, tc.colors, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
 			renderGolden(t, tc.name, canvasSize, scene(w, tc.bg))
 		})
 	}
@@ -128,8 +128,8 @@ func TestModalOpenAndClosedDiffer(t *testing.T) {
 	body := fillRect(color.NRGBA{R: 200, G: 200, B: 200, A: 255}, 40)
 	bg := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 
-	open := modal.Render(shaper, modal.Props{Body: body, Shaper: shaper}, true, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
-	closed := modal.Render(shaper, modal.Props{Body: body, Shaper: shaper}, false, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypeScale)
+	open := modal.Render(shaper, modal.Props{Body: body, Shaper: shaper}, true, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
+	closed := modal.Render(shaper, modal.Props{Body: body, Shaper: shaper}, false, tokens.DefaultLight, tokens.Spacing, sharpRadius, tokens.DefaultTypography.TitleMedium, tokens.Comfortable)
 
 	imgOpen := capture(t, canvasSize, scene(open, bg))
 	imgClosed := capture(t, canvasSize, scene(closed, bg))

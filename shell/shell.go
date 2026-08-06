@@ -214,24 +214,32 @@ func Shell(th rx.Observable[theme.Theme], props Props) rx.Observable[layout.Widg
 // column — use RenderThreeColumn to supply a pre-built aside widget; a
 // StackedPage Props renders only the navbar and footer — use
 // RenderStackedPage to supply pre-built section widgets.
+//
+// label is the LabelLarge role's whole text style, which the shell
+// spends on its navbar, and d is the density both the navbar and the
+// navbar slot's pinned height derive from. Pass
+// tokens.DefaultTypography.LabelLarge and tokens.Comfortable for the
+// default desktop look; before F3.4 the static path was pinned to
+// Comfortable with no way to say otherwise.
 func Render(
 	shaper *text.Shaper,
 	props Props,
 	sidebarW layout.Widget,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
+	d tokens.Density,
 	splitRatio float32,
 ) layout.Widget {
 	switch props.Layout {
 	case SplitPane:
 		return staticSplitPane(props.Left, props.Right, splitRatio, colors, props.SplitAxis)
 	case ThreeColumn:
-		return RenderThreeColumn(shaper, props, sidebarW, nil, colors, sp, ts, defaultAsideDp)
+		return RenderThreeColumn(shaper, props, sidebarW, nil, colors, sp, label, d, defaultAsideDp)
 	case StackedPage:
-		return RenderStackedPage(shaper, props, nil, colors, sp, ts)
+		return RenderStackedPage(shaper, props, nil, colors, sp, label, d)
 	default:
-		return staticSidebarHeaderMain(sidebarW, shaper, props, colors, sp, ts)
+		return staticSidebarHeaderMain(sidebarW, shaper, props, colors, sp, label, d)
 	}
 }
 
@@ -260,15 +268,14 @@ func staticSidebarHeaderMain(
 	props Props,
 	colors tokens.ColorTokens,
 	sp tokens.SpacingScale,
-	ts tokens.TypeScale,
+	label tokens.TextStyle,
+	d tokens.Density,
 ) layout.Widget {
 	if sidebarW == nil {
 		sidebarW = emptyWidget
 	}
-	// The static path renders at tokens.Comfortable (the Render signature
-	// predates E1.4); density-aware rendering goes through Shell.
-	nbW := navbar.Render(shaper, props.Navbar, colors, sp, ts)
-	return composeSidebarHeaderMain(sidebarW, nbW, props.Main, navbarHeight(tokens.Comfortable))
+	nbW := navbar.Render(shaper, props.Navbar, colors, sp, label, d)
+	return composeSidebarHeaderMain(sidebarW, nbW, props.Main, navbarHeight(d))
 }
 
 // composeSidebarHeaderMain stacks the three slots so that Tab focus
