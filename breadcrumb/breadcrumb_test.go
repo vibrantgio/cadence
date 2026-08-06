@@ -2,6 +2,7 @@ package breadcrumb_test
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -173,6 +174,15 @@ func renderGolden(t *testing.T, name string, size image.Point, draw layout.Widge
 		t.Fatalf("load %s: %v", path, err)
 		return
 	}
+	// A size change is a failure in its own right, and it has to be caught
+	// here: once the bounds differ there is no pixel count to compare, and
+	// pixelDiff refuses to invent one.
+	if sb, ib := stored.Bounds(), img.Bounds(); sb != ib {
+		actualPath := strings.TrimSuffix(path, ".png") + ".actual.png"
+		_ = saveImage(actualPath, img)
+		t.Fatalf("%q: size changed: golden is %dx%d, render is %dx%d (actual saved to %s)",
+			name, sb.Dx(), sb.Dy(), ib.Dx(), ib.Dy(), actualPath)
+	}
 	if n := pixelDiff(stored, img); n > 0 {
 		actualPath := strings.TrimSuffix(path, ".png") + ".actual.png"
 		_ = saveImage(actualPath, img)
@@ -180,9 +190,19 @@ func renderGolden(t *testing.T, name string, size image.Point, draw layout.Widge
 	}
 }
 
+// pixelDiff counts the pixels that differ between a and b, which must have equal
+// bounds. It panics if they do not.
+//
+// The panic replaces a returned -1. There is no pixel count to report for two
+// images of different shapes, and -1 read as "no difference" to every `n > 0`
+// test — which is how a golden whose size had moved compared as a pass, here
+// and across the whole organization. A caller for which a size change is a
+// real outcome rather than a defect — the stored-golden comparison, and only
+// it — must compare Bounds itself before calling.
 func pixelDiff(a, b *image.RGBA) int {
 	if a.Bounds() != b.Bounds() {
-		return -1
+		panic(fmt.Sprintf("pixelDiff: images must have equal bounds, got %v and %v",
+			a.Bounds(), b.Bounds()))
 	}
 	bounds := a.Bounds()
 	n := 0
