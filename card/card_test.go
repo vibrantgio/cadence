@@ -12,11 +12,11 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"github.com/vibrantgio/cadence/card"
 	"github.com/vibrantgio/prism/golden"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 const (
@@ -66,23 +66,26 @@ func defaultShaper(t *testing.T) *text.Shaper {
 // surviving slots, and whether anything is clipped at the card's inner edge.
 //
 // ASCII only, per F4.2 — no symbol reaches a stored image.
+//
+// It draws through spectrum/typeset, like every other text site in this
+// organization: a role's LineHeight is the CSS line box, and handing it to
+// gioui.org/widget.Label does not produce that box. This helper built the label
+// by hand until F5.6, which made the goldens record a layout no correct caller
+// produces — the one thing a golden must never do. See the repository
+// AGENTS.md and llms.txt "LINE HEIGHT NEEDS spectrum/typeset".
 func textSlot(shaper *text.Shaper, style tokens.TextStyle, c color.NRGBA, maxLines int, s string) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		m := op.Record(gtx.Ops)
 		paint.ColorOp{Color: c}.Add(gtx.Ops)
 		material := m.Stop()
 
-		f := font.Font{Typeface: font.Typeface(style.Typeface)}
-		if style.Weight != 0 {
-			f.Weight = tokens.FontWeight(style.Weight)
-		}
-		l := widget.Label{MaxLines: maxLines}
-		if style.LineHeight != 0 {
-			l.LineHeight = unit.Sp(style.LineHeight)
-			l.LineHeightScale = 1
-		}
+		f := typeset.Font(style, font.Normal)
+		lbl := typeset.Label(style, maxLines)
+		// Min is dropped so the slot reports the text it drew rather than the
+		// card's own minimum, which is what makes the stack of slots visible in
+		// the golden. typeset.Layout re-applies whatever constraints remain.
 		gtx.Constraints.Min = image.Point{}
-		return l.Layout(gtx, shaper, f, unit.Sp(style.Size), s, material)
+		return typeset.Layout(gtx, shaper, lbl, f, unit.Sp(style.Size), s, material)
 	}
 }
 

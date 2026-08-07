@@ -101,12 +101,18 @@ type Props[T any] struct {
 	// the clicked column and re-emits Sort and a re-sorted Items slice.
 	OnSort func(gtx layout.Context, col int)
 
-	// Shaper is an explicit per-instance override of the text shaper.
-	// Leave it nil in normal use: the table then shapes its header labels
-	// with the theme's shaper (Typography.Shaper()), which is built once
-	// and cached inside the theme's Typography value. Set it only when
-	// this table must shape with a different shaper than the theme
+	// Shaper is an explicit per-instance override of the text shaper. Leave
+	// it nil in normal use: the table then shapes its header labels with the
+	// theme's shaper (Typography.Shaper()), which is built once for the
+	// process and shared by every component reading that typography — the
+	// cache lives behind the Typography value, so it survives the copy this
+	// component's map function makes of it (spectrum F5.1). Set it only when
+	// this instance must shape with a different shaper than the theme
 	// provides.
+	//
+	// A shaper is not safe to use from two goroutines; Gio lays the widget
+	// forest out on the one goroutine that runs the event loop, which is
+	// what makes sharing it correct. See spectrum/tokens.Typography.Shaper.
 	Shaper *text.Shaper
 }
 

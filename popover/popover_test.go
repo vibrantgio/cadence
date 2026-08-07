@@ -16,13 +16,13 @@ import (
 	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/popover"
 	"github.com/vibrantgio/prism/golden"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
+	"github.com/vibrantgio/spectrum/typeset"
 )
 
 const (
@@ -74,6 +74,17 @@ func defaultShaper(t *testing.T) *text.Shaper {
 // clearance there. A longer line would run off the left of left-dark, where
 // the canvas cannot grow — the interaction tests below address the anchor by
 // hardcoded coordinates in this 320×240 frame.
+//
+// It draws through spectrum/typeset, like every other text site in this
+// organization: a role's LineHeight is the CSS line box, and handing it to
+// gioui.org/widget.Label does not produce that box. This helper built the label
+// by hand until F5.6, which made the goldens record a layout no correct caller
+// produces — the one thing a golden must never do. See the repository
+// AGENTS.md and llms.txt "LINE HEIGHT NEEDS spectrum/typeset". A MaxLines:1
+// label is exactly the case widget.Label measures identically at every line
+// height, so this is where the difference is largest: the content is BodyMedium
+// and now stands in its declared 20 dp box rather than its 17 px of ink, and
+// the surface grew with it.
 func textContent(t *testing.T, fg color.NRGBA) layout.Widget {
 	t.Helper()
 	shaper := defaultShaper(t)
@@ -83,17 +94,12 @@ func textContent(t *testing.T, fg color.NRGBA) layout.Widget {
 		paint.ColorOp{Color: fg}.Add(gtx.Ops)
 		material := m.Stop()
 
-		f := font.Font{Typeface: font.Typeface(style.Typeface)}
-		if style.Weight != 0 {
-			f.Weight = tokens.FontWeight(style.Weight)
-		}
-		l := widget.Label{MaxLines: 1}
-		if style.LineHeight != 0 {
-			l.LineHeight = unit.Sp(style.LineHeight)
-			l.LineHeightScale = 1
-		}
+		f := typeset.Font(style, font.Normal)
+		lbl := typeset.Label(style, 1)
+		// Min is dropped so the content reports its own size rather than the
+		// popover's; typeset.Layout re-applies whatever constraints remain.
 		gtx.Constraints.Min = image.Point{}
-		return l.Layout(gtx, shaper, f, unit.Sp(style.Size), "Sort ascending", material)
+		return typeset.Layout(gtx, shaper, lbl, f, unit.Sp(style.Size), "Sort ascending", material)
 	}
 }
 
