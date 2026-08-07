@@ -2,18 +2,11 @@ package sidebar_test
 
 import (
 	"context"
-	"flag"
-	"fmt"
 	"image"
 	"image/color"
-	"image/png"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"gioui.org/f32"
-	"gioui.org/gpu/headless"
 	gioinput "gioui.org/io/input"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
@@ -26,11 +19,10 @@ import (
 
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/sidebar"
+	"github.com/vibrantgio/prism/golden"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
-
-var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
 
 const (
 	expandedW  = 192
@@ -124,7 +116,7 @@ func TestSidebarGolden(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			props := sidebar.Props{Items: navItems(3, tc.activeIdx), Shaper: shaper}
 			w := sidebar.Render(shaper, props, tc.collapsed, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
-			renderGolden(t, tc.name, tc.size, scene(w, tc.bg))
+			golden.Render(t, tc.name, tc.size, scene(w, tc.bg))
 		})
 	}
 }
@@ -140,7 +132,7 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 	render := func(activeIdx int, colors tokens.ColorTokens) *image.RGBA {
 		props := sidebar.Props{Items: navItems(2, activeIdx), Shaper: shaper}
 		w := sidebar.Render(shaper, props, false, colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
-		return capture(t, expandedSize, scene(w, bg))
+		return golden.Capture(t, expandedSize, scene(w, bg))
 	}
 
 	for _, c := range []struct {
@@ -153,10 +145,7 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			def := render(-1, c.colors)
 			act := render(0, c.colors)
-			if def == nil || act == nil {
-				return
-			}
-			if n := pixelDiff(def, act); n == 0 {
+			if n := golden.PixelDiff(def, act); n == 0 {
 				t.Errorf("%s: active and default render identically; expected Primary tint pixels", c.name)
 			}
 		})
@@ -313,14 +302,14 @@ func TestSidebarKeyboardReachesAnItemNeverLaidOut(t *testing.T) {
 		t.Fatalf("click on item 0 fired %d time(s), want 1", fired[0])
 	}
 
-	before := capture(t, expandedSize, w)
+	before := golden.Capture(t, expandedSize, w)
 
 	// End selects the last item — the one no frame has laid out.
 	r.Queue(key.Event{Name: key.NameEnd, State: key.Press})
 	driveFrame(w, ops, r, expandedSize)
-	after := capture(t, expandedSize, w)
+	after := golden.Capture(t, expandedSize, w)
 	if before != nil && after != nil {
-		if d := pixelDiff(before, after); d == 0 {
+		if d := golden.PixelDiff(before, after); d == 0 {
 			t.Error("End changed nothing on screen: the selection did not move or the list did not follow it")
 		}
 	}
@@ -367,12 +356,12 @@ func TestSidebarActiveSeedsTheSelection(t *testing.T) {
 
 	// The live rail with Active=1 must look like the static render with
 	// Active=1: the seed reaches the same highlight the Render path draws.
-	live := capture(t, expandedSize, scene(w, bg))
+	live := golden.Capture(t, expandedSize, scene(w, bg))
 	static := sidebar.Render(shaper, sidebar.Props{Items: navItems(3, 1), Shaper: shaper},
 		false, tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
-	want := capture(t, expandedSize, scene(static, bg))
+	want := golden.Capture(t, expandedSize, scene(static, bg))
 	if live != nil && want != nil {
-		if d := pixelDiff(live, want); d != 0 {
+		if d := golden.PixelDiff(live, want); d != 0 {
 			t.Errorf("live rail seeded from Active differs from the static render by %d pixel(s); want 0", d)
 		}
 	}
@@ -386,9 +375,9 @@ func TestSidebarActiveSeedsTheSelection(t *testing.T) {
 	// Home moves the selection to item 0, and the highlight with it.
 	r.Queue(key.Event{Name: key.NameHome, State: key.Press})
 	driveFrame(w, ops, r, expandedSize)
-	moved := capture(t, expandedSize, scene(w, bg))
+	moved := golden.Capture(t, expandedSize, scene(w, bg))
 	if live != nil && moved != nil {
-		if d := pixelDiff(live, moved); d == 0 {
+		if d := golden.PixelDiff(live, moved); d == 0 {
 			t.Error("Home left the highlight on the Active item; the selection is not driving it")
 		}
 	}
@@ -447,7 +436,7 @@ func TestSidebarCompactGolden(t *testing.T) {
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
 	props := sidebar.Props{Items: navItems(3, 1), Collapsed: rx.Of(false), Shaper: defaultShaper(t)}
 	w := liveWidget(t, sidebar.Sidebar(rx.Of(densityTheme(tokens.Compact)), props))
-	renderGolden(t, "light-compact-expanded", expandedSize, scene(w, lightBG))
+	golden.Render(t, "light-compact-expanded", expandedSize, scene(w, lightBG))
 }
 
 // indexIcon returns a 16×16 filled square whose colour varies with the
@@ -504,7 +493,7 @@ func TestSidebarOverflowGolden(t *testing.T) {
 			ops := new(op.Ops)
 			driveFrame(w, ops, r, tc.size)
 			driveFrame(w, ops, r, tc.size)
-			before := capture(t, tc.size, scene(w, lightBG))
+			before := golden.Capture(t, tc.size, scene(w, lightBG))
 
 			// One wheel event larger than the total overflow; the list
 			// clamps at the end. The frame that absorbs the scroll still
@@ -518,152 +507,13 @@ func TestSidebarOverflowGolden(t *testing.T) {
 			driveFrame(w, ops, r, tc.size)
 			driveFrame(w, ops, r, tc.size)
 
-			after := capture(t, tc.size, scene(w, lightBG))
+			after := golden.Capture(t, tc.size, scene(w, lightBG))
 			if before != nil && after != nil {
-				if d := pixelDiff(before, after); d == 0 {
+				if d := golden.PixelDiff(before, after); d == 0 {
 					t.Fatalf("scroll event moved nothing: overflowing list did not scroll")
 				}
 			}
-			renderGolden(t, tc.name, tc.size, scene(w, lightBG))
+			golden.Render(t, tc.name, tc.size, scene(w, lightBG))
 		})
-	}
-}
-
-// ---- golden harness (inlined; prism/internal/golden is not importable
-// from outside the prism module tree) ----
-
-func capture(t *testing.T, size image.Point, draw layout.Widget) *image.RGBA {
-	t.Helper()
-	w, err := headless.NewWindow(size.X, size.Y)
-	if err != nil {
-		t.Skipf("headless rendering not supported: %v", err)
-		return nil
-	}
-	defer w.Release()
-
-	var ops op.Ops
-	gtx := layout.Context{
-		Constraints: layout.Exact(size),
-		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
-		Ops:         &ops,
-	}
-	draw(gtx)
-	if err := w.Frame(&ops); err != nil {
-		t.Fatalf("Frame: %v", err)
-	}
-	img := image.NewRGBA(image.Rectangle{Max: size})
-	if err := w.Screenshot(img); err != nil {
-		t.Fatalf("Screenshot: %v", err)
-	}
-	return img
-}
-
-func renderGolden(t *testing.T, name string, size image.Point, draw layout.Widget) {
-	t.Helper()
-	img := capture(t, size, draw)
-	if img == nil {
-		return
-	}
-	path := filepath.Join("testdata", "golden", name+".png")
-
-	if *goldenUpdate {
-		if err := saveImage(path, img); err != nil {
-			t.Fatalf("save %s: %v", path, err)
-		}
-		return
-	}
-
-	stored, err := loadImage(path)
-	if os.IsNotExist(err) {
-		t.Fatalf("%s not found; run go test -golden.update to create", path)
-		return
-	}
-	if err != nil {
-		t.Fatalf("load %s: %v", path, err)
-		return
-	}
-	// A size change is a failure in its own right, and it has to be caught
-	// here: once the bounds differ there is no pixel count to compare, and
-	// pixelDiff refuses to invent one.
-	if sb, ib := stored.Bounds(), img.Bounds(); sb != ib {
-		actualPath := strings.TrimSuffix(path, ".png") + ".actual.png"
-		_ = saveImage(actualPath, img)
-		t.Fatalf("%q: size changed: golden is %dx%d, render is %dx%d (actual saved to %s)",
-			name, sb.Dx(), sb.Dy(), ib.Dx(), ib.Dy(), actualPath)
-	}
-	if n := pixelDiff(stored, img); n > 0 {
-		actualPath := strings.TrimSuffix(path, ".png") + ".actual.png"
-		_ = saveImage(actualPath, img)
-		t.Fatalf("%q: %d pixel(s) differ (actual saved to %s)", name, n, actualPath)
-	}
-}
-
-// pixelDiff counts the pixels that differ between a and b, which must have equal
-// bounds. It panics if they do not.
-//
-// The panic replaces a returned -1. There is no pixel count to report for two
-// images of different shapes, and -1 read as "no difference" to every `n > 0`
-// test — which is how a golden whose size had moved compared as a pass, here
-// and across the whole organization. A caller for which a size change is a
-// real outcome rather than a defect — the stored-golden comparison, and only
-// it — must compare Bounds itself before calling.
-func pixelDiff(a, b *image.RGBA) int {
-	if a.Bounds() != b.Bounds() {
-		panic(fmt.Sprintf("pixelDiff: images must have equal bounds, got %v and %v",
-			a.Bounds(), b.Bounds()))
-	}
-	bounds := a.Bounds()
-	n := 0
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			off := (y-bounds.Min.Y)*a.Stride + (x-bounds.Min.X)*4
-			if a.Pix[off] != b.Pix[off] ||
-				a.Pix[off+1] != b.Pix[off+1] ||
-				a.Pix[off+2] != b.Pix[off+2] ||
-				a.Pix[off+3] != b.Pix[off+3] {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-func saveImage(path string, img *image.RGBA) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	nrgba := &image.NRGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect}
-	return png.Encode(f, nrgba)
-}
-
-func loadImage(path string) (*image.RGBA, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	decoded, err := png.Decode(f)
-	if err != nil {
-		return nil, err
-	}
-	switch v := decoded.(type) {
-	case *image.RGBA:
-		return v, nil
-	case *image.NRGBA:
-		return &image.RGBA{Pix: v.Pix, Stride: v.Stride, Rect: v.Rect}, nil
-	default:
-		bounds := decoded.Bounds()
-		rgba := image.NewRGBA(bounds)
-		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-			for x := bounds.Min.X; x < bounds.Max.X; x++ {
-				rgba.Set(x, y, decoded.At(x, y))
-			}
-		}
-		return rgba, nil
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/vibrantgio/cadence/navbar"
 	"github.com/vibrantgio/cadence/shell"
 	"github.com/vibrantgio/cadence/sidebar"
+	"github.com/vibrantgio/prism/golden"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
@@ -65,7 +66,7 @@ func TestShellThreeColumnGolden(t *testing.T) {
 				Footer: tc.footer,
 			}
 			w := shell.RenderThreeColumn(shaper, props, sbW, tc.aside, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable, tc.width)
-			renderGolden(t, tc.name, threeColSize, scene(w, tc.bg))
+			golden.Render(t, tc.name, threeColSize, scene(w, tc.bg))
 		})
 	}
 }

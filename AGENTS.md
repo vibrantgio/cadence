@@ -28,12 +28,19 @@ root.
 
     go build ./... && go test ./...
 
-**Golden images.** Tests in 17 packages compare rendered output against
-PNGs committed under `testdata/golden/`. When a change legitimately moves
-pixels, regenerate them within the same change, look at what came out, and
-say so in the commit. From the repository root:
+**Golden images.** Tests in 18 packages compare rendered output against
+PNGs committed under `testdata/golden/`. They render through
+`github.com/vibrantgio/prism/golden`, which declares `-golden.update` and is
+shared with pulse, markdown and the workbench apps; F5.5 deleted the
+eighteen inlined copies that used to live here, one per component package. Do
+not add a nineteenth, and do not declare a second `-golden.update`: two
+registrations of one flag name in a test binary panic at init.
 
-    go test ./accordion ./alert ./breadcrumb ./card ./feature ./hero ./modal ./navbar ./pagination ./popover ./pricing ./shell ./sidebar ./tabs ./testimonial ./toast ./tooltip -golden.update
+When a change legitimately moves pixels, regenerate them within the same
+change, look at what came out, and say so in the commit. From the repository
+root:
+
+    go test ./accordion ./alert ./breadcrumb ./card ./feature ./hero ./modal ./navbar ./pagination ./popover ./pricing ./shell ./sidebar ./table ./tabs ./testimonial ./toast ./tooltip -golden.update
 
 Both halves of that line matter. `go test` cannot tell that an unfamiliar
 flag is boolean, so a flag placed before the packages swallows them: `go

@@ -21,6 +21,7 @@ import (
 	"github.com/reactivego/rx"
 	"github.com/vibrantgio/cadence/navbar"
 	"github.com/vibrantgio/cadence/shell"
+	"github.com/vibrantgio/prism/golden"
 	"github.com/vibrantgio/spectrum/theme"
 	"github.com/vibrantgio/spectrum/tokens"
 )
@@ -83,7 +84,7 @@ func TestShellStackedPageGolden(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			w := shell.RenderStackedPage(shaper, tc.props, tc.sections, tc.colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
-			renderGolden(t, tc.name, stackedSize, scene(w, tc.bg))
+			golden.Render(t, tc.name, stackedSize, scene(w, tc.bg))
 		})
 	}
 }
@@ -120,10 +121,7 @@ func TestShellStackedPageContentMaxWidth(t *testing.T) {
 			}
 			w := shell.RenderStackedPage(shaper, props, []layout.Widget{section},
 				tokens.DefaultLight, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
-			img := capture(t, stackedSize, w)
-			if img == nil {
-				return
-			}
+			img := golden.Capture(t, stackedSize, w)
 			if gotMin != tc.wantW || gotMax != tc.wantW {
 				t.Fatalf("section width constraints: min %d max %d; want exactly %d", gotMin, gotMax, tc.wantW)
 			}

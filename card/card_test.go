@@ -1,18 +1,11 @@
 package card_test
 
 import (
-	"flag"
-	"fmt"
 	"image"
 	"image/color"
-	"image/png"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"gioui.org/font"
-	"gioui.org/gpu/headless"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -22,10 +15,9 @@ import (
 	"gioui.org/widget"
 
 	"github.com/vibrantgio/cadence/card"
+	"github.com/vibrantgio/prism/golden"
 	"github.com/vibrantgio/spectrum/tokens"
 )
-
-var goldenUpdate = flag.Bool("golden.update", false, "overwrite golden images with current output")
 
 const (
 	canvasW, canvasH = 280, 200
@@ -165,7 +157,7 @@ func TestCardGolden(t *testing.T) {
 				props = card.Props{Header: header}
 			}
 			w := card.Render(props, tc.colors, tokens.Spacing, sharpRadius)
-			renderGolden(t, tc.name, canvasSize, scene(w, tc.margin, tc.bg))
+			golden.Render(t, tc.name, canvasSize, scene(w, tc.margin, tc.bg))
 		})
 	}
 }
@@ -183,12 +175,9 @@ func TestCardElevatedDiffersFromOutlined(t *testing.T) {
 	outlined := card.Render(card.Props{Header: header}, tokens.DefaultLight, tokens.Spacing, sharpRadius)
 	elevated := card.Render(card.Props{Header: header, Elevated: true}, tokens.DefaultLight, tokens.Spacing, sharpRadius)
 
-	imgOut := capture(t, canvasSize, scene(outlined, marginPx, bg))
-	imgElev := capture(t, canvasSize, scene(elevated, marginPx, bg))
-	if imgOut == nil || imgElev == nil {
-		return
-	}
-	if n := pixelDiff(imgOut, imgElev); n == 0 {
+	imgOut := golden.Capture(t, canvasSize, scene(outlined, marginPx, bg))
+	imgElev := golden.Capture(t, canvasSize, scene(elevated, marginPx, bg))
+	if n := golden.PixelDiff(imgOut, imgElev); n == 0 {
 		t.Error("elevated and outlined cards render identically; expected shadow/outline difference")
 	}
 }
@@ -203,151 +192,9 @@ func TestCardLightDarkDiffer(t *testing.T) {
 	light := card.Render(card.Props{Header: header, Body: body}, tokens.DefaultLight, tokens.Spacing, sharpRadius)
 	dark := card.Render(card.Props{Header: header, Body: body}, tokens.DefaultDark, tokens.Spacing, sharpRadius)
 
-	imgLight := capture(t, canvasSize, scene(light, 0, bg))
-	imgDark := capture(t, canvasSize, scene(dark, 0, bg))
-	if imgLight == nil || imgDark == nil {
-		return
-	}
-	if n := pixelDiff(imgLight, imgDark); n == 0 {
+	imgLight := golden.Capture(t, canvasSize, scene(light, 0, bg))
+	imgDark := golden.Capture(t, canvasSize, scene(dark, 0, bg))
+	if n := golden.PixelDiff(imgLight, imgDark); n == 0 {
 		t.Error("light and dark cards render identically; expected colour differences")
-	}
-}
-
-// ---- golden harness (inlined; prism/internal/golden is not importable
-// from outside the prism module tree) ----
-
-func capture(t *testing.T, size image.Point, draw layout.Widget) *image.RGBA {
-	t.Helper()
-	w, err := headless.NewWindow(size.X, size.Y)
-	if err != nil {
-		t.Skipf("headless rendering not supported: %v", err)
-		return nil
-	}
-	defer w.Release()
-
-	var ops op.Ops
-	gtx := layout.Context{
-		Constraints: layout.Exact(size),
-		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
-		Ops:         &ops,
-	}
-	draw(gtx)
-	if err := w.Frame(&ops); err != nil {
-		t.Fatalf("Frame: %v", err)
-	}
-	img := image.NewRGBA(image.Rectangle{Max: size})
-	if err := w.Screenshot(img); err != nil {
-		t.Fatalf("Screenshot: %v", err)
-	}
-	return img
-}
-
-func renderGolden(t *testing.T, name string, size image.Point, draw layout.Widget) {
-	t.Helper()
-	img := capture(t, size, draw)
-	if img == nil {
-		return
-	}
-	path := filepath.Join("testdata", "golden", name+".png")
-
-	if *goldenUpdate {
-		if err := saveImage(path, img); err != nil {
-			t.Fatalf("save %s: %v", path, err)
-		}
-		return
-	}
-
-	stored, err := loadImage(path)
-	if os.IsNotExist(err) {
-		t.Fatalf("%s not found; run go test -golden.update to create", path)
-		return
-	}
-	if err != nil {
-		t.Fatalf("load %s: %v", path, err)
-		return
-	}
-	// A size change is a failure in its own right, and it has to be caught
-	// here: once the bounds differ there is no pixel count to compare, and
-	// pixelDiff refuses to invent one.
-	if sb, ib := stored.Bounds(), img.Bounds(); sb != ib {
-		actualPath := strings.TrimSuffix(path, ".png") + ".actual.png"
-		_ = saveImage(actualPath, img)
-		t.Fatalf("%q: size changed: golden is %dx%d, render is %dx%d (actual saved to %s)",
-			name, sb.Dx(), sb.Dy(), ib.Dx(), ib.Dy(), actualPath)
-	}
-	if n := pixelDiff(stored, img); n > 0 {
-		actualPath := strings.TrimSuffix(path, ".png") + ".actual.png"
-		_ = saveImage(actualPath, img)
-		t.Fatalf("%q: %d pixel(s) differ (actual saved to %s)", name, n, actualPath)
-	}
-}
-
-// pixelDiff counts the pixels that differ between a and b, which must have equal
-// bounds. It panics if they do not.
-//
-// The panic replaces a returned -1. There is no pixel count to report for two
-// images of different shapes, and -1 read as "no difference" to every `n > 0`
-// test — which is how a golden whose size had moved compared as a pass, here
-// and across the whole organization. A caller for which a size change is a
-// real outcome rather than a defect — the stored-golden comparison, and only
-// it — must compare Bounds itself before calling.
-func pixelDiff(a, b *image.RGBA) int {
-	if a.Bounds() != b.Bounds() {
-		panic(fmt.Sprintf("pixelDiff: images must have equal bounds, got %v and %v",
-			a.Bounds(), b.Bounds()))
-	}
-	bounds := a.Bounds()
-	n := 0
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			off := (y-bounds.Min.Y)*a.Stride + (x-bounds.Min.X)*4
-			if a.Pix[off] != b.Pix[off] ||
-				a.Pix[off+1] != b.Pix[off+1] ||
-				a.Pix[off+2] != b.Pix[off+2] ||
-				a.Pix[off+3] != b.Pix[off+3] {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-func saveImage(path string, img *image.RGBA) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	nrgba := &image.NRGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect}
-	return png.Encode(f, nrgba)
-}
-
-func loadImage(path string) (*image.RGBA, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	decoded, err := png.Decode(f)
-	if err != nil {
-		return nil, err
-	}
-	switch v := decoded.(type) {
-	case *image.RGBA:
-		return v, nil
-	case *image.NRGBA:
-		return &image.RGBA{Pix: v.Pix, Stride: v.Stride, Rect: v.Rect}, nil
-	default:
-		bounds := decoded.Bounds()
-		rgba := image.NewRGBA(bounds)
-		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-			for x := bounds.Min.X; x < bounds.Max.X; x++ {
-				rgba.Set(x, y, decoded.At(x, y))
-			}
-		}
-		return rgba, nil
 	}
 }
