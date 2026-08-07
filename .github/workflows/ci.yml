@@ -13,6 +13,11 @@
 # F5.4 made the test step verbose and added the golden-image report after it.
 # This repository stores golden PNGs, and until F5.4 nothing here could say
 # whether CI ever compared them; see the report step for why.
+#
+# F5.7 answered it — they never have, here or in any of the four repositories
+# that store images — and settled what to do about it. The answer is above the
+# build step: this job is a build-and-test gate, deliberately, and not a pixel
+# gate. Do not add the GL drivers without reading that first.
 name: CI
 on:
   push:
@@ -33,6 +38,43 @@ jobs:
           sudo apt-get install -y gcc pkg-config libwayland-dev libx11-dev \
             libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev \
             libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+
+      # Everything above is headers. A -dev package lets cgo compile against
+      # EGL, GLES and Vulkan and puts no implementation on the runner, so
+      # headless.NewWindow has nothing to open and every golden test skips —
+      # which is what F5.4's report step below has said on every run since it
+      # was added.
+      #
+      # The obvious repair is to add the runtime drivers from gio's own Linux
+      # CI manifest (.builds/linux.yml in the gioui.org module):
+      #
+      #     libegl1 libegl-mesa0 libglx-mesa0 libgl1-mesa-dri
+      #     mesa-libgallium libgbm1 mesa-vulkan-drivers
+      #
+      # F5.7 tried exactly that, in vibrantgio/pulse, which has the smallest
+      # golden set in the organization — 21 images against this repository's
+      # share of the other 164 — so that the experiment risked as little as
+      # possible. It works: the verdict flipped from SKIPPED to COMPARED on
+      # the next run, on an ordinary ubuntu-latest with no GPU, no Xvfb and no
+      # LIBGL_ALWAYS_SOFTWARE, with all seven packages present in the archive.
+      #
+      # And then nine of pulse's twenty-one goldens failed — 12782 pixels
+      # apart, about 3% of every pixel it stores: eight small differences of
+      # 0.3–4% of a frame, which is a rasteriser disagreeing about antialiased
+      # edges and blur falloff, plus one cross-fade frame 36% different, where
+      # a blend diverges across an area rather than along an edge. The twelve
+      # that matched exactly include the three drawn on the CPU, which is the
+      # control — harness, PNG encoding and comparison are all sound. It is
+      # the GPU rasterisation that differs.
+      #
+      # Every golden in this organization was generated on macOS. Installing
+      # the drivers therefore would not make CI honest about the images; it
+      # would make CI assert that Linux mesa and Metal rasterise identically,
+      # which they do not and need not — and golden determinism must never be
+      # allowed to constrain what the system is permitted to draw. So the
+      # drivers stay out, and AGENTS.md says in as many words that these
+      # images are compared only on a developer's machine, rather than leaving
+      # a green tick to imply otherwise.
       - run: go build ./...
 
       # -v and the tee are load-bearing, not noise. Every golden harness in
@@ -41,10 +83,19 @@ jobs:
       # test passes — so "CI is green" claimed nothing at all about the
       # stored PNGs. Plain `go test` never prints a skip, which is why no
       # earlier run could be asked either.
+      #
+      # -count=1 is load-bearing too, and F5.7 found out the hard way.
+      # actions/setup-go caches ~/.cache/go-build keyed on go.sum, so the Go
+      # test cache survives from run to run — and go test replays a cached
+      # run's *output*, skip lines and all. A push that changed only this
+      # workflow therefore hit that cache in every package: the test step took
+      # one second instead of fourteen and faithfully reprinted skips recorded
+      # by a runner configured differently. A CI test step that can replay an
+      # answer from before the machine changed is not testing the machine.
       - name: Test
         run: |
           set -o pipefail
-          go test -v ./... 2>&1 | tee "$RUNNER_TEMP/test.log"
+          go test -count=1 -v ./... 2>&1 | tee "$RUNNER_TEMP/test.log"
 
       # The verdict is emitted as a workflow annotation and not only as log
       # text, because the two are not equally reachable: downloading a run
@@ -53,14 +104,12 @@ jobs:
       # returns them to an unauthenticated caller. That is what makes this
       # question answerable from a clone, with curl, by whoever asks next.
       #
-      # It reports; it does not gate. Turning the skip into a failure is a
-      # separate decision and belongs with its fix: gio's own Linux CI
-      # (.builds/linux.yml in the gioui.org module) installs the runtime
-      # drivers this workflow does not — libegl-mesa0, libglx-mesa0,
-      # libgl1-mesa-dri, mesa-libgallium, libgbm1, libegl1 and
-      # mesa-vulkan-drivers. Without them there is no EGL display to
-      # initialise and no Vulkan ICD for gio's fallback context to find, and
-      # the -dev packages installed above supply headers, not drivers.
+      # It reports; it does not gate — and F5.7 established that it should not.
+      # The drivers that would make it a gate are named above the build step,
+      # together with what happened when they were installed on pulse. This
+      # step now measures three things rather than one: whether the images
+      # ran, why not when they did not, and how far apart they were when they
+      # did.
       - name: Were the golden images compared, or skipped? (F5.4)
         if: always()
         run: |
@@ -80,16 +129,65 @@ jobs:
             echo "::notice::$verdict"
           fi
           echo "$verdict"
+
+          # F5.7: and *why* it could not open one. The harness formats the
+          # error from headless.NewWindow into its skip message, so the reason
+          # is already in the log — which is exactly the place a reader
+          # without admin rights cannot look. Without it "SKIPPED" is a dead
+          # end: a missing EGL implementation, a missing DRI device and a
+          # Vulkan loader with no ICD all read identically. Distinct reasons
+          # only, so the annotation stays one line however many tests skipped.
+          if [ "$headless" -gt 0 ]; then
+            reasons=$(grep -oE 'headless rendering not supported: .*' "$log" | sort -u |
+              awk '{ printf "%s%s", sep, $0; sep = " | " } END { if (NR) print "" }')
+            echo "::warning::golden images skipped because: $reasons"
+            echo "$reasons"
+          fi
+
+          # F5.7: by how much, if they ran. "The images ran" and "the images
+          # match" are different answers and only the second one would let CI
+          # gate on them, so anyone re-running pulse's experiment here needs
+          # the counts — and the counts live in the run log, behind the same
+          # admin wall F5.4 hit. They are summed here and published the way
+          # the verdict above is: as an annotation, which needs no token.
+          differed=$(grep -cE 'pixel\(s\) differ' "$log" || true)
+          resized=$(grep -c 'size changed: golden is' "$log" || true)
+          worst=$(grep -oE '[0-9]+ pixel\(s\) differ' "$log" | awk '$1 > m { m = $1 } END { print m + 0 }')
+          sum=$(grep -oE '[0-9]+ pixel\(s\) differ' "$log" | awk '{ s += $1 } END { print s + 0 }')
+          if [ "$((differed + resized))" -gt 0 ]; then
+            delta="golden images MISMATCHED: $differed by pixel value and $resized by size; $sum pixel(s) differ across them, worst single image $worst"
+            echo "::warning::$delta"
+            # Per image, not only the aggregate. An aggregate says how bad;
+            # only the list says what kind of bad, and the two point opposite
+            # ways: a few pixels on every image is a rasteriser rounding an
+            # antialiased edge, a third of one image with its neighbours
+            # untouched is a different picture being drawn.
+            per=$(grep -oE 'golden: "[^"]+": .*' "$log" |
+              sed 's/^golden: //; s/ (actual saved to [^)]*)$//' | sort -u |
+              awk '{ printf "%s%s", sep, $0; sep = "; " } END { if (NR) print "" }')
+            echo "::warning::which ones: $per"
+            echo "$per"
+          else
+            delta="golden images: no stored PNG mismatched"
+          fi
+          echo "$delta"
+
           {
-            echo "### Golden images (F5.4)"
+            echo "### Golden images (F5.4, F5.7)"
             echo
             echo "$verdict"
+            echo
+            echo "$delta"
             echo
             echo "| count | |"
             echo "|------:|-|"
             echo "| $headless | skips for want of a headless window |"
             echo "| $skipped | skipped tests, all causes |"
             echo "| $passed | passing tests |"
+            echo "| $differed | goldens differing by pixel value |"
+            echo "| $resized | goldens differing by size |"
+            echo
+            grep -E 'golden: "' "$log" || true
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Layer check (ADR-001)
