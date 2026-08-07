@@ -65,6 +65,17 @@ func trail() []breadcrumb.Item {
 // typography; the single-segment golden is the structural assertion ("no
 // chevrons when n == 1") and now also shows that the lone segment takes the
 // current-location colour that internal_test asserts numerically.
+//
+// The two three-segment images moved one pixel in F5.3, and the reason is
+// worth keeping. capture constrains the canvas with layout.Exact, and a
+// horizontal layout.Flex passes its own cross minimum straight to every Rigid
+// child — so each segment label was handed Min.Y == Max.Y == 32. widget.Label
+// constrained its result to that 32 and spectrum/typeset then added the line
+// box deficit on top, so a label reported 35 px for a 32 px slot and the
+// chevrons centred against a row 3 px taller than the row actually was.
+// typeset now constrains the corrected height instead of correcting the
+// constrained one, the trail measures its slot, and the chevrons sit one pixel
+// higher. The labels themselves did not move.
 func TestBreadcrumbGolden(t *testing.T) {
 	shaper := defaultShaper(t)
 	lightBG := color.NRGBA{R: 240, G: 240, B: 240, A: 255}
