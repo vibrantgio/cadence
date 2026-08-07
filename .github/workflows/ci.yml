@@ -9,6 +9,10 @@
 # resolve from the module proxy at published tags. Until the post-refactor
 # tags are pushed, this workflow may be red on a fresh clone-and-build; that
 # is expected and clears with the next tag push.
+#
+# F5.4 made the test step verbose and added the golden-image report after it.
+# This repository stores golden PNGs, and until F5.4 nothing here could say
+# whether CI ever compared them; see the report step for why.
 name: CI
 on:
   push:
@@ -30,7 +34,64 @@ jobs:
             libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev \
             libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
       - run: go build ./...
-      - run: go test ./...
+
+      # -v and the tee are load-bearing, not noise. Every golden harness in
+      # the organization answers a failed headless.NewWindow with
+      # t.Skipf("... headless rendering not supported ..."), and a skipped
+      # test passes — so "CI is green" claimed nothing at all about the
+      # stored PNGs. Plain `go test` never prints a skip, which is why no
+      # earlier run could be asked either.
+      - name: Test
+        run: |
+          set -o pipefail
+          go test -v ./... 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      # The verdict is emitted as a workflow annotation and not only as log
+      # text, because the two are not equally reachable: downloading a run
+      # log needs admin rights on the repository, while annotations are
+      # public — GET /repos/vibrantgio/<repo>/commits/<sha>/check-runs
+      # returns them to an unauthenticated caller. That is what makes this
+      # question answerable from a clone, with curl, by whoever asks next.
+      #
+      # It reports; it does not gate. Turning the skip into a failure is a
+      # separate decision and belongs with its fix: gio's own Linux CI
+      # (.builds/linux.yml in the gioui.org module) installs the runtime
+      # drivers this workflow does not — libegl-mesa0, libglx-mesa0,
+      # libgl1-mesa-dri, mesa-libgallium, libgbm1, libegl1 and
+      # mesa-vulkan-drivers. Without them there is no EGL display to
+      # initialise and no Vulkan ICD for gio's fallback context to find, and
+      # the -dev packages installed above supply headers, not drivers.
+      - name: Were the golden images compared, or skipped? (F5.4)
+        if: always()
+        run: |
+          log="$RUNNER_TEMP/test.log"
+          if [ ! -f "$log" ]; then
+            echo "::warning::golden images: no test log, the test step never ran"
+            exit 0
+          fi
+          headless=$(grep -c 'headless rendering not supported' "$log" || true)
+          skipped=$(grep -cE '^[[:space:]]*--- SKIP' "$log" || true)
+          passed=$(grep -cE '^[[:space:]]*--- PASS' "$log" || true)
+          if [ "$headless" -gt 0 ]; then
+            verdict="golden images SKIPPED: $headless test(s) could not open a headless window, so no stored PNG was compared on this runner"
+            echo "::warning::$verdict"
+          else
+            verdict="golden images COMPARED: no test skipped for want of a headless window"
+            echo "::notice::$verdict"
+          fi
+          echo "$verdict"
+          {
+            echo "### Golden images (F5.4)"
+            echo
+            echo "$verdict"
+            echo
+            echo "| count | |"
+            echo "|------:|-|"
+            echo "| $headless | skips for want of a headless window |"
+            echo "| $skipped | skipped tests, all causes |"
+            echo "| $passed | passing tests |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Layer check (ADR-001)
         run: |
           curl -fsSL https://raw.githubusercontent.com/vibrantgio/.github/master/scripts/check-layers.sh \

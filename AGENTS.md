@@ -42,6 +42,21 @@ holds, not `./...`. And `./...` cannot stand in for the list — this module
 has test packages that store no goldens, and a test binary rejects a flag
 it never declared.
 
+**A green CI run does not say these images matched.** The harness answers a
+failed `headless.NewWindow` with `t.Skipf`, and a skipped test passes, so
+the pixels and the build status are independent facts. Until F5.4 nothing
+could tell them apart: the workflow ran plain `go test`, which never prints
+a skip, and downloading a run log needs admin rights on the repository. The
+test step is verbose now, and the step after it publishes the verdict as a
+workflow annotation — and annotations, unlike logs, are public: the
+`check-runs` endpoint for the commit returns them with no token at all.
+Read it before treating green as a golden-image gate, and expect the answer
+to be that they skipped. The runner installs the GL *development* headers,
+where gio's own Linux CI also installs the drivers — `libegl-mesa0`,
+`libglx-mesa0`, `libgl1-mesa-dri`, `mesa-libgallium`, `libgbm1`, `libegl1`,
+`mesa-vulkan-drivers` — without which there is no EGL display to initialise
+and no Vulkan ICD for gio's fallback context to find.
+
 **A golden test pins its faces; application code does not.** Every golden and
 pixel test here builds its shaper with
 `tokens.DefaultTypography.DeterministicShaper()` — the default typography's
