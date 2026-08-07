@@ -129,7 +129,17 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 	shaper := defaultShaper(t)
 	bg := color.NRGBA{R: 128, G: 128, B: 128, A: 255}
 
-	render := func(activeIdx int, colors tokens.ColorTokens) *image.RGBA {
+	// render takes the *testing.T it is called with rather than closing over
+	// the outer one, and that parameter is the whole point of it. golden.Capture
+	// skips — via t.Skipf, which is runtime.Goexit — on any machine without a
+	// headless GPU, which is every CI runner this organization has. Handed the
+	// parent's t from inside a subtest, that Goexit unwinds the subtest's
+	// goroutine while marking the parent skipped, and the testing package reports
+	// it as "subtest may have called FailNow on a parent test" — a failure, not a
+	// skip. That is precisely why cadence was red on all sixteen CI runs while
+	// green on every developer machine: locally Capture never reaches the skip.
+	render := func(t *testing.T, activeIdx int, colors tokens.ColorTokens) *image.RGBA {
+		t.Helper()
 		props := sidebar.Props{Items: navItems(2, activeIdx), Shaper: shaper}
 		w := sidebar.Render(shaper, props, false, colors, tokens.Spacing, tokens.DefaultTypography.LabelLarge, tokens.Comfortable)
 		return golden.Capture(t, expandedSize, scene(w, bg))
@@ -143,8 +153,8 @@ func TestSidebarActiveTintIsVisible(t *testing.T) {
 		{"dark", tokens.DefaultDark},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			def := render(-1, c.colors)
-			act := render(0, c.colors)
+			def := render(t, -1, c.colors)
+			act := render(t, 0, c.colors)
 			if n := golden.PixelDiff(def, act); n == 0 {
 				t.Errorf("%s: active and default render identically; expected Primary tint pixels", c.name)
 			}
